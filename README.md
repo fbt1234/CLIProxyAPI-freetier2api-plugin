@@ -27,7 +27,7 @@
 
 1. 从 [Releases](../../releases) 下载 `freetier-v0.1.62-dumate13.so`（Linux arm64）。
 2. 放进 CLIProxyAPI 的 `plugins/linux/arm64/` 目录。
-3. 确认 `config.yaml` 里 `plugins.configs.freetier.store` 的 `release-tag` 与文件名一致（`v0.1.62-dumate13`）。宿主按 `<id>-<release-tag>.so` 找文件，对不上会加载失败。
+3. 确认 `config.yaml` 里 `plugins.configs.freetier.store` 的三处**完全一致**：`version: 0.1.62-dumate13`、`release-tag: v0.1.62-dumate13`、文件名 `freetier-v0.1.62-dumate13.so`。宿主优先用 `store.version` 严格匹配文件名解析出的版本，只改其中一处会导致插件**静默不加载**（日志里没有任何报错，看起来像正常启动）。
 4. 重启宿主，日志出现 `plugin registered plugin_id=freetier ... version=v0.1.62-dumate13` 即成功。
 
 ## 功能特性
