@@ -12,6 +12,17 @@
 
 > **本仓库说明**：上游 `jiandanc/CLIProxyAPI-freetier2api-plugin` 已随作者账号一并从 GitHub 消失（账号与仓库均为 404）。本仓库自 **v0.1.29** 起由 `cxy2730` 接手维护，插件 ID 仍为 `freetier`，已有安装可直接覆盖升级。仓库已从 fork 网络脱离，是独立仓库；完整提交历史保留，`v0.1.44` 及更早的 tag 只存在于归档仓库 `cxy2730/CLIProxyAPI-freetier2api-plugin-legacy`，本仓库从 `v0.1.45` 起继续发版。
 
+> **本仓库说明**：基于 `cxy2730/CLIProxyAPI-freetier2api-plugin` **v0.1.62**（commit `a639f23`）构建，在原版基础上额外接入**百度搭子（dumate）**。增量只有一处新目录 `internal/vendors/dumate/`（约 2218 行）与 5 个挂钩文件（约 162 行），其余主流程与上游一致。上游发新版时，把 `dumate-v0.1.62.patch` 用 `patch -p1` 重放后重新编译即可。**不要用上游 release 直接覆盖本仓库产物**，否则搭子模块会丢失。
+
+## 百度搭子（dumate）
+
+在插件控制台点击「登录百度」会打开官方登录页，登录后进入 `console.bce.baidu.com`，再把整行 Cookie 粘贴回控制台即可。
+
+- 凭证必须同时包含 `BDUSS` 与 `bce-long-term-sessionid`。只登录百度账号页不会产生后者，必须真正进一次百度智能云控制台。
+- 缺 `bce-long-term-sessionid` 时上游会返回 `HTTP 401 {"code":10001,"message":"登录已经过期"}`。
+- Token 有效期实测约 23 小时，插件按 Cookie 指纹在进程内缓存票据，避免每次请求重复换票。
+- 自动签到由 `auto_checkin` 控制，默认关闭；开启后按 `task_schedule_minutes.checkin` 的分钟排程执行。
+
 ## 功能特性
 
 - 复用宿主 Anthropic `/v1/messages`、OpenAI `/v1/chat/completions` 与 OpenAI `/v1/responses` 接口，无需额外部署独立网关

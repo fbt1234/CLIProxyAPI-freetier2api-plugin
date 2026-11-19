@@ -623,7 +623,7 @@ func exchangeTraeToken(ctx context.Context, authHost, clientID, userID, refreshT
 		return "", "", 0, fmt.Errorf("read token exchange response: %w", errRead)
 	}
 	if resp.StatusCode >= 400 {
-		return "", "", 0, fmt.Errorf("upstream exchange error %d: %s", resp.StatusCode, string(body))
+		return "", "", 0, fmt.Errorf("upstream exchange error %d: %s", resp.StatusCode, truncateBody(string(body)))
 	}
 
 	var res struct {
@@ -638,7 +638,7 @@ func exchangeTraeToken(ctx context.Context, authHost, clientID, userID, refreshT
 		return "", "", 0, err
 	}
 	if res.Result.Token == "" {
-		return "", "", 0, fmt.Errorf("exchange token failed: %s", string(body))
+		return "", "", 0, fmt.Errorf("exchange token failed: %s", truncateBody(string(body)))
 	}
 
 	exp := res.Result.TokenExpireAt
@@ -694,6 +694,21 @@ func renderCallbackHTML(w http.ResponseWriter, code int, title, message string) 
 // RefreshCredential 用 refreshToken 轮换 accessToken（Trae OAuth ExchangeToken）。
 //
 // 协议与 exchangeTraeToken 相同：PascalCase 载荷，响应取 Result.Token。
+// bareUserID 从存储的 uid 中剥离 vendor 前缀，返回上游换/续 token 接口
+// 期望的裸 UserID。
+//
+// 上游回调给的 UserID 本身带 vendor 前缀（如 traecn-3291281464765242），
+// 登录换 token 时用这个带前缀值能成功；但续期接口按裸数字 UserID
+// （3291281464765242）校验 refresh token 归属，带前缀会报
+// 「refresh token user does not match request user」（code 20101）。
+// 故续期前剥掉 vendorID 前缀；无前缀或已裸则原样返回。
+func bareUserID(uid, vendorID string) string {
+	if uid == "" || vendorID == "" {
+		return uid
+	}
+	return strings.TrimPrefix(uid, vendorID+"-")
+}
+
 func RefreshCredential(ctx context.Context, cred *Credential, cfg Config) (*Credential, bool, error) {
 	if cred == nil || cred.RefreshToken == "" {
 		return cred, false, nil
@@ -703,7 +718,7 @@ func RefreshCredential(ctx context.Context, cred *Credential, cfg Config) (*Cred
 		"ClientID":     cfg.ClientID,
 		"RefreshToken": cred.RefreshToken,
 		"ClientSecret": "-",
-		"UserID":       cred.UID,
+		"UserID":       bareUserID(cred.UID, cfg.VendorID),
 	}
 	bodyBytes, _ := json.Marshal(payload)
 
@@ -741,7 +756,7 @@ func RefreshCredential(ctx context.Context, cred *Credential, cfg Config) (*Cred
 		return nil, false, fmt.Errorf("decode exchange token response: %w", err)
 	}
 	if result.Result.Token == "" {
-		return nil, false, fmt.Errorf("exchange token failed: %s", string(body))
+		return nil, false, fmt.Errorf("exchange token failed: %s", truncateBody(string(body)))
 	}
 
 	expiresAt := result.Result.TokenExpireAt

@@ -129,23 +129,39 @@ func TestStreamPassesThroughErrorFrames(t *testing.T) {
 	}
 }
 
-// TestNormalizeFrameDropsUnknownFields 验证帧白名单在非流式路径也生效。
-func TestNormalizeFrameDropsUnknownFields(t *testing.T) {
-	frame := map[string]any{
-		"id": "c1", "secret": "leak",
-		"choices": []any{map[string]any{"index": float64(0), "delta": map[string]any{"content": "hi", "private": 1}}},
+// TestStreamDropsUnknownFields 验证帧白名单（含 delta 内层）在流式路径生效。
+func TestStreamDropsUnknownFields(t *testing.T) {
+	stream := strings.Join([]string{
+		`data: {"id":"c1","object":"chat.completion.chunk","secret":"leak","choices":[{"index":0,"delta":{"content":"hi","private":1},"finish_reason":""}],"usage":null}`,
+		"",
+		"data: [DONE]",
+		"",
+	}, "\n")
+
+	var frames [][]byte
+	if _, errStream := Stream(strings.NewReader(stream), StreamOptions{
+		Emit: func(payload []byte) error {
+			frames = append(frames, append([]byte(nil), payload...))
+			return nil
+		},
+	}); errStream != nil {
+		t.Fatalf("Stream: %v", errStream)
 	}
-	normalized := normalizeFrame(frame)
-	if _, okSecret := normalized["secret"]; okSecret {
-		t.Fatal("unknown top-level field must be dropped")
+	if len(frames) != 1 {
+		t.Fatalf("expected 1 frame, got %d", len(frames))
 	}
-	choices := normalized["choices"].([]any)
-	delta := choices[0].(map[string]any)["delta"].(map[string]any)
-	if _, okPrivate := delta["private"]; okPrivate {
-		t.Fatal("unknown delta field must be dropped")
+	frame := string(frames[0])
+	if strings.Contains(frame, "secret") || strings.Contains(frame, "private") {
+		t.Fatalf("unknown fields must be dropped: %s", frame)
 	}
-	if delta["content"] != "hi" {
-		t.Fatal("known delta fields must survive")
+	if !strings.Contains(frame, `"content":"hi"`) {
+		t.Fatalf("known delta fields must survive: %s", frame)
+	}
+	if !strings.Contains(frame, `"finish_reason":null`) {
+		t.Fatalf("empty finish_reason must normalize to null: %s", frame)
+	}
+	if !strings.Contains(frame, `"usage":null`) {
+		t.Fatalf("usage key must always be present: %s", frame)
 	}
 }
 
@@ -429,5 +445,83 @@ func TestApplyCatalogFallbacksFillsWindow(t *testing.T) {
 	}
 	if filled[0].ContextWindow != defaultContextWindow {
 		t.Fatalf("unknown model should get the default window, got %d", filled[0].ContextWindow)
+	}
+}
+
+// TestNormalizeIdentitySentence 锁住三方客户端身份句/签名的归一：
+// 非官方客户端（deepseek-harness 等）的品牌被替换为 WorkBuddy，
+// 工作区约定（workspace root）被替换为 workspace，普通内容不受影响，
+// 且幂等。
+func TestNormalizeIdentitySentence(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string // "" 表示应原样返回
+	}{
+		{
+			name: "deepseek-harness 身份句",
+			in:   "You are an AI agent powered by DeepSeek Harness.\n\nYou are a coding agent.",
+			want: "You are an AI agent powered by WorkBuddy.\n\nYou are a coding agent.",
+		},
+		{
+			name: "deepseek-harness 工作区约定",
+			in:   "You are an AI agent powered by DeepSeek Harness.\n\nTokens prefixed with @ are paths. Relative paths resolve from the workspace root.",
+			want: "You are an AI agent powered by WorkBuddy.\n\nTokens prefixed with @ are paths. Relative paths resolve from the workspace.",
+		},
+		{
+			name: "工作区约定无品牌也归一",
+			in:   "Tokens prefixed with @ are paths. Relative paths resolve from the workspace root.",
+			want: "Tokens prefixed with @ are paths. Relative paths resolve from the workspace.",
+		},
+		{
+			name: "claude 身份句",
+			in:   "You are Claude, an AI assistant.",
+			want: "You are WorkBuddy, an AI assistant.",
+		},
+		{
+			name: "codex 身份句",
+			in:   "You are Codex, an AI assistant.",
+			want: "You are WorkBuddy, an AI assistant.",
+		},
+		{
+			name: "普通 system 内容不受影响",
+			in:   "You are helpful.\n\nFollow the instructions.",
+			want: "",
+		},
+		{
+			name: "幂等：已替换为 WorkBuddy 不重复处理",
+			in:   "You are an AI agent powered by WorkBuddy.",
+			want: "",
+		},
+		{
+			name: "品牌不在身份句式开头不处理",
+			in:   "请把这段 deepseek 代码解释一下。",
+			want: "",
+		},
+	}
+	for _, tc := range cases {
+		got := normalizeIdentitySentence(tc.in)
+		if tc.want == "" {
+			if got != tc.in {
+				t.Errorf("%s: got %q, want 原样 %q", tc.name, got, tc.in)
+			}
+		} else if got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestPrepareBodyNormalizesIdentity 锁住 PrepareBody 管道对身份句的品牌
+// 替换在消息数组里真正生效（端到端）。
+func TestPrepareBodyNormalizesIdentity(t *testing.T) {
+	body := `{"model":"hy4free","stream":true,"messages":[{"role":"system","content":"You are an AI agent powered by DeepSeek Harness.\n\nBe helpful."},{"role":"user","content":"hi"}]}`
+	out := PrepareBody([]byte(body), PrepareOptions{Model: "hy4free"})
+	// 序列化后品牌已被替换。
+	if !strings.Contains(string(out), "WorkBuddy") {
+		t.Fatalf("PrepareBody 未替换身份句品牌: %s", string(out))
+	}
+	// 语义不丢：用户消息仍在。
+	if !strings.Contains(string(out), "\"hi\"") {
+		t.Fatalf("用户消息丢失: %s", string(out))
 	}
 }

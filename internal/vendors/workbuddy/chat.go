@@ -2,6 +2,7 @@ package workbuddy
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -945,6 +946,102 @@ type StreamOptions struct {
 	Hint func(code string) string
 }
 
+// streamFrame 是下发给客户端的归一化帧。
+//
+// 为什么用结构体而不是 map[string]any：字段白名单由 struct tag 表达——没列出的
+// 键在解码时就被丢掉，语义与原先 normalizeFrame / normalizeDelta 的逐键拷贝完全
+// 一致，但每帧只要一次 Unmarshal + 一次 Marshal。map 路线每帧约 80 次分配、
+// 4.7KB 垃圾，一次长回复有几百帧，这些全压在转发热路径上。
+type streamFrame struct {
+	ID                string          `json:"id"`
+	Object            string          `json:"object"`
+	Created           int64           `json:"created,omitempty"`
+	Model             string          `json:"model,omitempty"`
+	SystemFingerprint string          `json:"system_fingerprint,omitempty"`
+	ServiceTier       string          `json:"service_tier,omitempty"`
+	Choices           []streamChoice  `json:"choices"`
+	Usage             json.RawMessage `json:"usage"`
+}
+
+// streamChoice 是帧里的单个 choice。
+type streamChoice struct {
+	Index        int             `json:"index"`
+	Delta        *streamDelta    `json:"delta,omitempty"`
+	FinishReason json.RawMessage `json:"finish_reason"`
+}
+
+// streamDelta 是增量内容：只保留客户端认的字段。
+//
+// 用 json.RawMessage 而不是具体类型：content / reasoning_content 的形态由上游
+// 决定（字符串、null、甚至数组），原样搬运既省一次类型转换，也不会把 null 变成
+// 缺省字段——那两种形态客户端都按「无内容」处理，但保持原样最不容易出意外。
+type streamDelta struct {
+	Role             json.RawMessage  `json:"role,omitempty"`
+	Content          json.RawMessage  `json:"content,omitempty"`
+	ReasoningContent json.RawMessage  `json:"reasoning_content,omitempty"`
+	Refusal          json.RawMessage  `json:"refusal,omitempty"`
+	ToolCalls        []streamToolCall `json:"tool_calls,omitempty"`
+	FunctionCall     json.RawMessage  `json:"function_call,omitempty"`
+}
+
+// streamToolCall 是一次工具调用的增量片。
+type streamToolCall struct {
+	Index    int             `json:"index"`
+	ID       string          `json:"id,omitempty"`
+	Type     string          `json:"type,omitempty"`
+	Function *streamFunction `json:"function,omitempty"`
+}
+
+type streamFunction struct {
+	Name      string          `json:"name,omitempty"`
+	Arguments json.RawMessage `json:"arguments,omitempty"`
+}
+
+// defaultStreamFrameID 是上游没给 id 时的兜底（客户端要求 id 非空）。
+const defaultStreamFrameID = "chatcmpl-wb2api"
+
+// decodeStreamFrame 把上游帧解成下发形态。
+//
+// 解码失败返回 false，由调用方原样透传。
+func decodeStreamFrame(payload string) (streamFrame, bool) {
+	var frame streamFrame
+	if errUnmarshal := json.Unmarshal([]byte(payload), &frame); errUnmarshal != nil {
+		return frame, false
+	}
+	if frame.Object == "" {
+		frame.Object = "chat.completion.chunk"
+	}
+	if frame.Choices == nil {
+		frame.Choices = []streamChoice{}
+	}
+	for i := range frame.Choices {
+		choice := &frame.Choices[i]
+		// finish_reason 空串归一为 null（客户端靠它判断结束）。
+		switch strings.TrimSpace(string(choice.FinishReason)) {
+		case "", `""`, "null":
+			choice.FinishReason = json.RawMessage("null")
+		}
+		delta := choice.Delta
+		if delta == nil {
+			continue
+		}
+		// function_call 是旧字段：空对象占位会被客户端当成一次调用，必须剔除。
+		if isEmptyJSONValue(delta.FunctionCall) {
+			delta.FunctionCall = nil
+		}
+	}
+	return frame, true
+}
+
+// isEmptyJSONValue 判断一个原样搬运的 JSON 值是否为空占位。
+func isEmptyJSONValue(raw json.RawMessage) bool {
+	switch strings.TrimSpace(string(raw)) {
+	case "", "null", "{}":
+		return true
+	}
+	return false
+}
+
 // Stream 读取上游 SSE 并把规范化后的帧交给 emit。
 //
 // 行为要点：
@@ -972,7 +1069,13 @@ func Stream(body io.Reader, opts StreamOptions) (StreamStats, error) {
 		if trimmed == "" {
 			continue
 		}
-		// 非 data: 行（注释、event: 等）原样下发，保持上游的帧结构。
+		// SSE 注释行（`: heartbeat` 之类）直接丢弃：宿主会给载荷补上 `data: `
+		// 前缀，转发出去就变成 `data: : heartbeat` 这种非法帧，严格客户端会
+		// 直接解析失败。注释行按 SSE 规范本来就该被忽略。
+		if strings.HasPrefix(trimmed, ":") {
+			continue
+		}
+		// 其它非 data: 行（event: / id: / retry:）原样下发，保持上游的帧结构。
 		if !strings.HasPrefix(trimmed, "data:") {
 			if errEmit := opts.emit([]byte(line)); errEmit != nil {
 				return stats, errEmit
@@ -990,7 +1093,8 @@ func Stream(body io.Reader, opts StreamOptions) (StreamStats, error) {
 		}
 
 		// 错误帧：原样透传，可选附加提示。上游的错误信息比我们重建的更有价值。
-		if isErrorFrame(payload) {
+		// 先做子串预判：错误帧极少，不该为每一帧多解一次 JSON。
+		if strings.Contains(payload, `"error"`) && isErrorFrame(payload) {
 			stats.Frames++
 			sawAny = true
 			if errEmit := opts.emit([]byte(attachHint(payload, opts.Hint))); errEmit != nil {
@@ -999,8 +1103,8 @@ func Stream(body io.Reader, opts StreamOptions) (StreamStats, error) {
 			continue
 		}
 
-		var frame map[string]any
-		if errUnmarshal := json.Unmarshal([]byte(payload), &frame); errUnmarshal != nil {
+		frame, okFrame := decodeStreamFrame(payload)
+		if !okFrame {
 			// 无法解析的帧原样透传（可能是上游新增的帧类型）。
 			stats.Frames++
 			sawAny = true
@@ -1011,21 +1115,22 @@ func Stream(body io.Reader, opts StreamOptions) (StreamStats, error) {
 		}
 
 		// tool_call 的 name 只保留在首片。
-		StripToolCallNames(frame, seenToolName)
+		stripToolCallNames(&frame, seenToolName)
 
 		// id 续传：上游偶发在后续帧漏 id，客户端会把它当成新消息。
-		if id, _ := frame["id"].(string); strings.TrimSpace(id) != "" {
+		if strings.TrimSpace(frame.ID) != "" {
 			if firstID == "" {
-				firstID = id
+				firstID = frame.ID
 			}
 		} else if firstID != "" {
-			frame["id"] = firstID
+			frame.ID = firstID
+		} else {
+			frame.ID = defaultStreamFrameID
 		}
 
-		collectStats(frame, &stats)
-		normalized := normalizeFrame(frame)
+		collectFrameStats(&frame, &stats)
 
-		encoded, errEncode := json.Marshal(normalized)
+		encoded, errEncode := json.Marshal(&frame)
 		if errEncode != nil {
 			continue
 		}
@@ -1043,6 +1148,56 @@ func Stream(body io.Reader, opts StreamOptions) (StreamStats, error) {
 		return stats, errEmptyStream
 	}
 	return stats, nil
+}
+
+// stripToolCallNames 让每个 tool_call 的 function.name 只出现在首片。
+//
+// 累加型客户端会做 name += delta.name，若每片都带 name 就会拼成
+// "BashBashBash"；覆盖型客户端（name ?? state.name）则不会被空值清空。
+// 因此「首片保留、后续删除该键」是同时满足两类客户端的做法。
+func stripToolCallNames(frame *streamFrame, seen map[int]bool) {
+	for i := range frame.Choices {
+		delta := frame.Choices[i].Delta
+		if delta == nil {
+			continue
+		}
+		for j := range delta.ToolCalls {
+			call := &delta.ToolCalls[j]
+			if call.Function == nil {
+				continue
+			}
+			if seen[call.Index] {
+				call.Function.Name = ""
+				continue
+			}
+			if call.Function.Name != "" {
+				seen[call.Index] = true
+			}
+		}
+	}
+}
+
+// collectFrameStats 从帧里提取统计信息。
+func collectFrameStats(frame *streamFrame, stats *StreamStats) {
+	if len(frame.Usage) > 0 && strings.TrimSpace(string(frame.Usage)) != "null" {
+		var usage map[string]any
+		if errUnmarshal := json.Unmarshal(frame.Usage, &usage); errUnmarshal == nil && len(usage) > 0 {
+			stats.Usage = usage
+			if credit, okCredit := toFloat64(usage["credit"]); okCredit {
+				stats.Credit = &credit
+			}
+		}
+	}
+	if strings.TrimSpace(frame.Model) != "" {
+		stats.Model = frame.Model
+	}
+	if len(frame.Choices) == 0 {
+		return
+	}
+	var reason string
+	if errUnmarshal := json.Unmarshal(frame.Choices[0].FinishReason, &reason); errUnmarshal == nil && strings.TrimSpace(reason) != "" {
+		stats.FinishReason = reason
+	}
 }
 
 func (o StreamOptions) emit(payload []byte) error {
@@ -1092,30 +1247,6 @@ func attachHint(payload string, hint func(code string) string) string {
 	return string(encoded)
 }
 
-// collectStats 从帧里提取统计信息。
-func collectStats(frame map[string]any, stats *StreamStats) {
-	if usage, okUsage := frame["usage"].(map[string]any); okUsage && len(usage) > 0 {
-		stats.Usage = usage
-		if credit, okCredit := toFloat64(usage["credit"]); okCredit {
-			stats.Credit = &credit
-		}
-	}
-	if model, okModel := frame["model"].(string); okModel && strings.TrimSpace(model) != "" {
-		stats.Model = model
-	}
-	choices, okChoices := frame["choices"].([]any)
-	if !okChoices || len(choices) == 0 {
-		return
-	}
-	choice, okChoice := choices[0].(map[string]any)
-	if !okChoice {
-		return
-	}
-	if reason, okReason := choice["finish_reason"].(string); okReason && strings.TrimSpace(reason) != "" {
-		stats.FinishReason = reason
-	}
-}
-
 func toFloat64(value any) (float64, bool) {
 	switch typed := value.(type) {
 	case float64:
@@ -1129,87 +1260,6 @@ func toFloat64(value any) (float64, bool) {
 		return parsed, errParse == nil
 	}
 	return 0, false
-}
-
-// normalizeFrame 用白名单重建帧。
-//
-// 顶层保留：id / object / created / model / system_fingerprint / service_tier / choices / usage。
-// delta 只保留：role / content / reasoning_content / refusal / tool_calls /
-// function_call（空占位剔除）。
-//
-// 丢弃上游的私有字段（session_id、trace 等）：它们对客户端无用，
-// 而且会把上游内部的会话标识暴露给下游。
-func normalizeFrame(frame map[string]any) map[string]any {
-	out := map[string]any{}
-	for _, key := range []string{"id", "object", "created", "model", "system_fingerprint", "service_tier"} {
-		if value, okValue := frame[key]; okValue {
-			out[key] = value
-		}
-	}
-	if _, okObject := out["object"]; !okObject {
-		out["object"] = "chat.completion.chunk"
-	}
-	if _, okID := out["id"]; !okID {
-		out["id"] = "chatcmpl-wb2api"
-	}
-
-	if choices, okChoices := frame["choices"].([]any); okChoices {
-		out["choices"] = normalizeChoices(choices)
-	} else {
-		out["choices"] = []any{}
-	}
-
-	// usage 缺失时显式给 null：客户端普遍会读这个键判断是否结束。
-	if usage, okUsage := frame["usage"]; okUsage {
-		out["usage"] = usage
-	} else {
-		out["usage"] = nil
-	}
-	return out
-}
-
-// normalizeChoices 重建 choices。
-func normalizeChoices(choices []any) []any {
-	out := make([]any, 0, len(choices))
-	for _, item := range choices {
-		choice, okChoice := item.(map[string]any)
-		if !okChoice {
-			continue
-		}
-		normalized := map[string]any{}
-		if index, okIndex := choice["index"]; okIndex {
-			normalized["index"] = index
-		}
-		if delta, okDelta := choice["delta"].(map[string]any); okDelta {
-			normalized["delta"] = normalizeDelta(delta)
-		}
-		// finish_reason 空串归一为 null（客户端靠它判断结束）。
-		if reason, okReason := choice["finish_reason"].(string); okReason && strings.TrimSpace(reason) != "" {
-			normalized["finish_reason"] = reason
-		} else {
-			normalized["finish_reason"] = nil
-		}
-		out = append(out, normalized)
-	}
-	return out
-}
-
-// normalizeDelta 用白名单重建 delta。
-func normalizeDelta(delta map[string]any) map[string]any {
-	out := map[string]any{}
-	for _, key := range []string{"role", "content", "reasoning_content", "refusal"} {
-		if value, okValue := delta[key]; okValue {
-			out[key] = value
-		}
-	}
-	if calls, okCalls := delta["tool_calls"].([]any); okCalls && len(calls) > 0 {
-		out["tool_calls"] = calls
-	}
-	// function_call 是旧字段：空对象占位会被客户端当成一次调用，必须剔除。
-	if functionCall, okFunctionCall := delta["function_call"].(map[string]any); okFunctionCall && len(functionCall) > 0 {
-		out["function_call"] = functionCall
-	}
-	return out
 }
 
 // Aggregate 把上游 SSE 流聚合成一个非流式响应。
@@ -1568,6 +1618,8 @@ func PrepareBody(body []byte, opts PrepareOptions) []byte {
 		messages = repackToolResultBlocks(messages)
 		// 8) 孤儿 tool_call 裁剪。
 		messages = cleanupOrphanToolCalls(messages)
+		// 8.5) 三方客户端身份句归一（非官方品牌 → WorkBuddy，防上游 11128 渠道校验）。
+		messages = normalizeIdentitySentences(messages)
 		payload["messages"] = messages
 	}
 
@@ -1650,6 +1702,14 @@ func positiveInt64(value any) (int64, bool) {
 			return 0, false
 		}
 		return int64(typed), true
+	case json.Number:
+		// decodeBodyMap 走 UseNumber，数值以 json.Number 到达这里。
+		if parsed, errParse := typed.Int64(); errParse == nil && parsed > 0 {
+			return parsed, true
+		}
+		if parsed, errParse := typed.Float64(); errParse == nil && parsed > 0 && parsed == float64(int64(parsed)) {
+			return int64(parsed), true
+		}
 	}
 	return 0, false
 }
@@ -1789,13 +1849,20 @@ func defaultEffortFor(table map[string]string, model string) string {
 	return strings.TrimSpace(table[strings.TrimSpace(model)])
 }
 
-// decodeBodyMap 把请求体解析成 map。解析失败返回 nil（调用方按"无法解析"处理）。
+// decodeBodyMap 把请求体解成 map。解析失败返回 nil（调用方按「无法解析」处理）。
+//
+// 用 json.Decoder + UseNumber：默认路径会把所有数字过成 float64，请求体里
+// 超过 2^53 的整数（seed、部分上游 id）会静默失真，序列化回去就不是原值了。
+// json.Number 保留原文，回写时逐字不变；读取数值统一走 core.FloatFromAny /
+// core.IntFromAny，两者都已支持 json.Number。
 func decodeBodyMap(body []byte) map[string]any {
 	if len(body) == 0 {
 		return nil
 	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber()
 	var payload map[string]any
-	if errUnmarshal := json.Unmarshal(body, &payload); errUnmarshal != nil {
+	if errUnmarshal := decoder.Decode(&payload); errUnmarshal != nil {
 		return nil
 	}
 	return payload
@@ -2246,48 +2313,4 @@ func DropTruncatedToolCalls(calls []any) []any {
 		out = append(out, call)
 	}
 	return out
-}
-
-// StripToolCallNames 让每个 tool_call 的 function.name 只出现在首片。
-//
-// 累加型客户端会做 name += delta.name，若每片都带 name 就会拼成
-// "BashBashBash"；覆盖型客户端（name ?? state.name）则不会被空值清空。
-// 因此「首片保留、后续删除该键」是同时满足两类客户端的做法。
-func StripToolCallNames(frame map[string]any, seen map[int]bool) {
-	choices, okChoices := frame["choices"].([]any)
-	if !okChoices {
-		return
-	}
-	for _, item := range choices {
-		choice, okChoice := item.(map[string]any)
-		if !okChoice {
-			continue
-		}
-		delta, okDelta := choice["delta"].(map[string]any)
-		if !okDelta {
-			continue
-		}
-		calls, okCalls := delta["tool_calls"].([]any)
-		if !okCalls {
-			continue
-		}
-		for _, callItem := range calls {
-			call, okCall := callItem.(map[string]any)
-			if !okCall {
-				continue
-			}
-			index := core.IntFromAny(call["index"])
-			function, okFunction := call["function"].(map[string]any)
-			if !okFunction {
-				continue
-			}
-			if seen[index] {
-				delete(function, "name")
-				continue
-			}
-			if _, okName := function["name"]; okName {
-				seen[index] = true
-			}
-		}
-	}
 }

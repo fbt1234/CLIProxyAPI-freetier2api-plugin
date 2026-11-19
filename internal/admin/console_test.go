@@ -258,8 +258,14 @@ func TestConsolePageNeverCallsWithoutKey(t *testing.T) {
 	if !regexp.MustCompile(`probeManagementAuth\(\)[\s\S]{0,800}startConsole\(\)`).MatchString(page) {
 		t.Fatal("console page must validate the key with a single probe before loading data")
 	}
-	if !strings.Contains(page, `loadVendors().then(function () {`) {
+	// 首屏仍然串行（供应商 → 状态 → 额度 → 模型），但供应商表复用探针那次
+	// 请求：探针已经调过 applyVendors，startConsole 不能再无条件重拉一遍，
+	// 否则每次打开控制台都白多一个 GET /vendors。
+	if !strings.Contains(page, `var vendors = vendorsLoaded ? Promise.resolve(true) : loadVendors();`) {
 		t.Fatal("console page must load the first screen serially (vendors first)")
+	}
+	if !strings.Contains(page, `applyVendors(data);`) {
+		t.Fatal("the auth probe must reuse its /vendors response instead of a second request")
 	}
 
 	// 3) 鉴权失败必须一次就停掉全部自动请求（登录轮询 + 页面轮询）。
@@ -897,5 +903,44 @@ func TestConsoleAutoAllCoversEveryAccount(t *testing.T) {
 	// 局部变量 head 会遮蔽 document.head，按 #75 复审要求改名。
 	if strings.Contains(page, "var head = rows.length") {
 		t.Fatal("summaryHead 不能再叫 head")
+	}
+}
+
+// TestConsolePageAutoRefreshOnlyStaleQuotas 锁定首屏额度刷新只打「过期账号」。
+//
+// 旧行为是每次打开控制台都对全部账号打一轮上游（实测 366-500ms），首屏因此
+// 总要等一轮。现在按缓存时间筛选，手动按钮仍走全量刷新。
+func TestConsolePageAutoRefreshOnlyStaleQuotas(t *testing.T) {
+	page := Page("/plugins/freetier")
+	for _, literal := range []string{
+		"var QUOTA_AUTO_REFRESH_MS = 10 * 60 * 1000;",
+		"function staleQuotaAccounts(maxAgeMs) {",
+		"var stale = staleQuotaAccounts(QUOTA_AUTO_REFRESH_MS);",
+		"if (!stale.length) return null;",
+		"return loadQuotas(true, stale)",
+	} {
+		if !strings.Contains(page, literal) {
+			t.Fatalf("console page is missing the stale-quota auto refresh %q", literal)
+		}
+	}
+	// 手动查询必须仍然全量：loadQuotas 的 targets 缺省为空表示全部账号。
+	if !strings.Contains(page, "function loadQuotas(quiet, targets) {") {
+		t.Fatal("manual quota query must keep the all-accounts default")
+	}
+}
+
+// TestPageBytesCached 锁定页面字节按 basePath 缓存（同一份切片复用）。
+func TestPageBytesCached(t *testing.T) {
+	first := PageBytes("/plugins/freetier")
+	second := PageBytes("/plugins/freetier")
+	if len(first) == 0 || string(first) != string(second) {
+		t.Fatal("cached page bytes must be identical across calls")
+	}
+	if &first[0] != &second[0] {
+		t.Fatal("page bytes must be reused instead of re-rendered per request")
+	}
+	other := PageBytes("/plugins/other")
+	if string(other) == string(first) || !strings.Contains(string(other), "/plugins/other") {
+		t.Fatal("a different base path must render its own page")
 	}
 }
