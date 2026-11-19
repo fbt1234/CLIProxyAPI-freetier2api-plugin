@@ -23,6 +23,13 @@
 - Token 有效期实测约 23 小时，插件按 Cookie 指纹在进程内缓存票据，避免每次请求重复换票。
 - 自动签到由 `auto_checkin` 控制，默认关闭；开启后按 `task_schedule_minutes.checkin` 的分钟排程执行。
 
+## 安装（本仓库构建）
+
+1. 从 [Releases](../../releases) 下载 `freetier-v0.1.62-dumate13.so`（Linux arm64）。
+2. 放进 CLIProxyAPI 的 `plugins/linux/arm64/` 目录。
+3. 确认 `config.yaml` 里 `plugins.configs.freetier.store` 的 `release-tag` 与文件名一致（`v0.1.62-dumate13`）。宿主按 `<id>-<release-tag>.so` 找文件，对不上会加载失败。
+4. 重启宿主，日志出现 `plugin registered plugin_id=freetier ... version=v0.1.62-dumate13` 即成功。
+
 ## 功能特性
 
 - 复用宿主 Anthropic `/v1/messages`、OpenAI `/v1/chat/completions` 与 OpenAI `/v1/responses` 接口，无需额外部署独立网关
