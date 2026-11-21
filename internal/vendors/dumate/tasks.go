@@ -5,11 +5,13 @@ package dumate
 // 签到（网页端，Cookie 认证）：
 //
 //	GET  /api/dumate/points/loginBonusInfo   → { hasIssued, totalPoints, signInDays }
-//	POST /api/dumate/points/loginBonus       → 领取当日积分（每日 500 分）
+//	POST /api/dumate/points/loginBonus       → 领取当日积分（每日 500 分，双端各一半）
 //
-// 上游按天幂等：已领过再 POST 不会重复发放，但仍会回一次成功。因此签到前
-// 先查状态，已领过就如实报「今日已签」——不要靠 POST 的结果反推，否则
-// 任务页会把重复签到记成一次新的成功。
+// 上游按天幂等：已领过再 POST 不会重复发放，但仍会回一次成功。
+// 签到分两端记账：web 200 分 + PC/desktop 300 分，靠请求体 clientType 区分；
+// loginBonusInfo 的 hasIssued 是全局标志（任一端领过即为真），不能用来判断
+// 另一端是否还欠一次。因此固定两端各打一次，累计发放数；两端都领过则
+// 累计为 0，再回落成「今日已签到」。
 //
 // 积分总览：
 //
@@ -43,16 +45,22 @@ func (v *adapter) Checkin(ctx context.Context, cred *core.Credential) (*core.Che
 	if errInfo != nil {
 		return nil, errInfo
 	}
-	if info.hasIssued {
-		return &core.CheckinResult{
-			Already: true,
-			Streak:  info.totalTimes,
-			Message: "今日已签到",
-		}, nil
-	}
+	// 双端签到：web 端 200 分、PC/desktop 端 300 分，上游按 clientType 分别记账。
+	// loginBonusInfo 的 hasIssued 是全局标志（任一端领过就为真），无法用它判断
+	// 另一端是否还欠一次，所以不做短路，固定两端各打一次：已领的一端会返回
+	// success=true 但不增发，重复调用是幂等的。
 	points, errClaim := claimLoginBonus(ctx, v.webBase, native.CookieValue())
-	if errClaim != nil {
-		return nil, errClaim
+	if points == 0 {
+		if info.hasIssued {
+			return &core.CheckinResult{
+				Already: true,
+				Streak:  info.totalTimes,
+				Message: "今日已签到",
+			}, nil
+		}
+		if errClaim != nil {
+			return nil, errClaim
+		}
 	}
 	credit := points
 	if credit == 0 {
@@ -98,8 +106,33 @@ func fetchLoginBonusInfo(ctx context.Context, webBase, cookie string) (*loginBon
 }
 
 // claimLoginBonus 领取当日签到积分，返回本次发放的积分数（未知时为 0）。
+//
+// 上游把签到拆成两端记账：web 端 200 分、PC/desktop 端 300 分，靠请求体的
+// clientType 区分。只领一端等于每天丢掉六成额度，所以两端各打一次，累计返回。
+// 已经领过的一端会返回 success=true 但不增发，重复调用不会重复计分。
 func claimLoginBonus(ctx context.Context, webBase, cookie string) (int64, error) {
-	status, payload, errDo := webRequest(ctx, webBase, http.MethodPost, LoginBonusPath, cookie, []byte("{}"), 25*time.Second)
+	var total int64
+	var firstErr error
+	for _, clientType := range []string{"web", "desktop"} {
+		points, errClaim := claimLoginBonusByClient(ctx, webBase, cookie, clientType)
+		total += points
+		if errClaim != nil && firstErr == nil {
+			firstErr = errClaim
+		}
+	}
+	if total == 0 && firstErr != nil {
+		return 0, firstErr
+	}
+	return total, nil
+}
+
+// claimLoginBonusByClient 领取指定端的签到积分。
+func claimLoginBonusByClient(ctx context.Context, webBase, cookie, clientType string) (int64, error) {
+	body, errBody := json.Marshal(map[string]string{"clientType": clientType})
+	if errBody != nil {
+		return 0, errBody
+	}
+	status, payload, errDo := webRequest(ctx, webBase, http.MethodPost, LoginBonusPath, cookie, body, 25*time.Second)
 	if errDo != nil {
 		return 0, errDo
 	}
