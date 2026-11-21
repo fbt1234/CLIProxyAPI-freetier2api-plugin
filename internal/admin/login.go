@@ -201,13 +201,6 @@ func (s *Service) handleLoginStartRequest(req pluginapi.ManagementRequest) plugi
 		if hint, okHint := response.Metadata["callback_hint"].(string); okHint && strings.TrimSpace(hint) != "" {
 			payload["callback_hint"] = strings.TrimSpace(hint)
 		}
-		// 扫码登录：把二维码图片地址与提示透传给页面渲染。
-		if qrImage, okQR := response.Metadata["qr_image_url"].(string); okQR && strings.TrimSpace(qrImage) != "" {
-			payload["qr_image_url"] = strings.TrimSpace(qrImage)
-		}
-		if hint, okHint := response.Metadata["hint"].(string); okHint && strings.TrimSpace(hint) != "" {
-			payload["hint"] = strings.TrimSpace(hint)
-		}
 	}
 	return JSONResponse(http.StatusOK, payload)
 }
