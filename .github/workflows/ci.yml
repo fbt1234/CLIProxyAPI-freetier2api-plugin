@@ -68,10 +68,14 @@ jobs:
     # macOS 已下线（GitHub 跑位抢占不可控，v0.1.40/v0.1.41 因此卡过发版）。
     strategy:
       fail-fast: false
+      # linux 构建钉在 ubuntu-24.04：ubuntu-latest 已于 2026-10~11 迁移到 26.04，
+      # 新 runner 的 gcc 会给 runtime/cgo 的 C 代码编出 AVX（ymm）指令，
+      # 导致产物在无 AVX 的旧 x86-64（如 J4125/Goldmont Plus）上 dlopen 即 SIGILL（见 PR #2）。
+      # CC/CGO_CFLAGS 均无法覆盖 runtime/cgo 的 C 编译参数，只能钉 runner 或容器化构建。
       matrix:
         include:
-          - { os: ubuntu-latest,  goos: linux,   goarch: amd64, ext: so,    cc: gcc }
-          - { os: ubuntu-latest,  goos: linux,   goarch: arm64, ext: so,    cc: aarch64-linux-gnu-gcc }
+          - { os: ubuntu-24.04,   goos: linux,   goarch: amd64, ext: so,    cc: gcc }
+          - { os: ubuntu-24.04,   goos: linux,   goarch: arm64, ext: so,    cc: aarch64-linux-gnu-gcc }
           - { os: windows-latest, goos: windows, goarch: amd64, ext: dll,   cc: gcc }
     steps:
       - uses: actions/checkout@v4
