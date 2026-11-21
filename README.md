@@ -10,7 +10,7 @@
 
 如果这个项目帮到了你，欢迎点个 Star 支持一下。
 
-> **本仓库说明**：基于 `cxy2730/CLIProxyAPI-freetier2api-plugin` **v0.1.65** 构建，在原版基础上额外接入**百度搭子（dumate）**。增量只有一处新目录 `internal/vendors/dumate/`（约 2218 行）与 4 个挂钩文件（合计 89 行），其余主流程与上游一致。上游发新版时，把 `dumate-v0.1.65-dumate3.patch` 用 `patch -p1` 重放后重新编译即可。**不要用上游 release 直接覆盖本仓库产物**，否则搭子模块会丢失。
+> **本仓库说明**：基于 `cxy2730/CLIProxyAPI-freetier2api-plugin` **v0.1.65** 构建，在原版基础上额外接入**百度搭子（dumate）**。增量只有一处新目录 `internal/vendors/dumate/`（约 2251 行）与 4 个挂钩文件（合计 89 行），其余主流程与上游一致。上游发新版时，把 `dumate-v0.1.65-dumate3.patch` 用 `patch -p1` 重放后重新编译即可。**不要用上游 release 直接覆盖本仓库产物**，否则搭子模块会丢失。
 
 ## 百度搭子（dumate）
 
