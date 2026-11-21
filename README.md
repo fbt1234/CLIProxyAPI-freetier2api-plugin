@@ -10,7 +10,7 @@
 
 如果这个项目帮到了你，欢迎点个 Star 支持一下。
 
-> **本仓库说明**：基于 `cxy2730/CLIProxyAPI-freetier2api-plugin` **v0.1.65** 构建，在原版基础上额外接入**百度搭子（dumate）**。增量只有一处新目录 `internal/vendors/dumate/`（约 2218 行）与 4 个挂钩文件（合计 89 行），其余主流程与上游一致。上游发新版时，把 `dumate-v0.1.65-dumate2.patch` 用 `patch -p1` 重放后重新编译即可。**不要用上游 release 直接覆盖本仓库产物**，否则搭子模块会丢失。
+> **本仓库说明**：基于 `cxy2730/CLIProxyAPI-freetier2api-plugin` **v0.1.65** 构建，在原版基础上额外接入**百度搭子（dumate）**。增量只有一处新目录 `internal/vendors/dumate/`（约 2218 行）与 4 个挂钩文件（合计 89 行），其余主流程与上游一致。上游发新版时，把 `dumate-v0.1.65-dumate3.patch` 用 `patch -p1` 重放后重新编译即可。**不要用上游 release 直接覆盖本仓库产物**，否则搭子模块会丢失。
 
 ## 百度搭子（dumate）
 
@@ -23,10 +23,10 @@
 
 ## 安装（本仓库构建）
 
-1. 从 [Releases](../../releases) 下载 `freetier-v0.1.65-dumate2.so`（Linux arm64）。
+1. 从 [Releases](../../releases) 下载 `freetier-v0.1.65-dumate3.so`（Linux arm64）。
 2. 放进 CLIProxyAPI 的 `plugins/linux/arm64/`。
-3. `config.yaml` 里三处**必须完全一致**：`store.version: 0.1.65-dumate2`、`store.release-tag: v0.1.65-dumate2`、文件名 `freetier-v0.1.65-dumate2.so`。宿主优先用 `store.version` 严格匹配文件名解析出的版本，只改其中一处会导致插件**静默不加载**（日志无任何报错）。
-4. 重启宿主，日志出现 `plugin registered ... version=v0.1.65-dumate2` 即成功。
+3. `config.yaml` 里三处**必须完全一致**：`store.version: 0.1.65-dumate3`、`store.release-tag: v0.1.65-dumate3`、文件名 `freetier-v0.1.65-dumate3.so`。宿主优先用 `store.version` 严格匹配文件名解析出的版本，只改其中一处会导致插件**静默不加载**（日志无任何报错）。
+4. 重启宿主，日志出现 `plugin registered ... version=v0.1.65-dumate3` 即成功。
 
 > **本仓库说明**：上游 `jiandanc/CLIProxyAPI-freetier2api-plugin` 已随作者账号一并从 GitHub 消失（账号与仓库均为 404）。本仓库自 **v0.1.29** 起由 `cxy2730` 接手维护，插件 ID 仍为 `freetier`，已有安装可直接覆盖升级。仓库已从 fork 网络脱离，是独立仓库；完整提交历史保留，`v0.1.44` 及更早的 tag 只存在于归档仓库 `cxy2730/CLIProxyAPI-freetier2api-plugin-legacy`，本仓库从 `v0.1.45` 起继续发版。
 
