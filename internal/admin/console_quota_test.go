@@ -39,12 +39,12 @@ func TestConsolePageShowsQuotaFailureReason(t *testing.T) {
 	page := Page("/plugins/freetier")
 
 	for _, literal := range []string{
-		`var reason = quota.message || "额度查询失败";`,
+		`var reason = quota.message || t("额度查询失败");`,
 		"remainCell.title = reason;",
 		"function shortReason(text)",
 		// 横幅逐账号明细：前 5 条 + 折叠剩余。
 		"failures.slice(0, 5).map(function (r)",
-		`"…等 " + failures.length + " 个账号失败"`,
+		`t("…等 ") + failures.length + t(" 个账号失败")`,
 		// 明细靠多行排布，缺了 white-space 会被挤成一行。
 		"white-space: pre-line;",
 	} {
@@ -63,7 +63,7 @@ func TestConsolePageShowsPendingGrant(t *testing.T) {
 
 	for _, literal := range []string{
 		`if (metrics[i] && metrics[i].key === "pending") return metrics[i].value;`,
-		`var pendingTag = el("span", " 待生效 " + pending, "muted");`,
+		`var pendingTag = el("span", t(" 待生效 ") + pending, "muted");`,
 	} {
 		if !strings.Contains(page, literal) {
 			t.Fatalf("console page is missing the pending-grant display (%s)", literal)

@@ -24,13 +24,13 @@
     if (apiKey) apiKey.hidden = true;
     if (!login) return;
     login.hidden = false;
-    document.getElementById("loginTitle").textContent = "添加 " + vendor.name + " 账号（网页登录）";
+    document.getElementById("loginTitle").textContent = t("添加 ") + providerName(vendor.name) + t(" 账号（网页登录）");
     document.getElementById("loginUrl").value = "";
     var pasteBox = document.getElementById("loginPasteBox");
     if (pasteBox) pasteBox.hidden = true;
 
     var status = document.getElementById("loginStatus");
-    status.textContent = "先选择登录方式；点按钮后会弹出阿里云人机验证（官方要求的风控步骤）。";
+    status.textContent = t("先选择登录方式；点按钮后会弹出阿里云人机验证（官方要求的风控步骤）。");
 
     var row = document.getElementById("loginVariantRow");
     row.textContent = "";
@@ -39,14 +39,14 @@
     loginVariantButtons = [];
     var variants = (vendor && vendor.login_variants) || [{ id: "google", label: "Google" }];
     variants.forEach(function (variant) {
-      var btn = el("button", "使用 " + variant.label + " 登录", "act primary");
+      var btn = el("button", t("使用 ") + variant.label + t(" 登录"), "act primary");
       btn.type = "button";
       btn.addEventListener("click", function () { beginCaptchaLogin(vendor, variant); });
       row.appendChild(btn);
       loginVariantButtons.push(btn);
     });
     // 凭证粘贴兜底：卡片本身也会自动续期，用户可以随时改走这条路。
-    var pasteBtn = el("button", "粘贴凭证", "act");
+    var pasteBtn = el("button", t("粘贴凭证"), "act");
     pasteBtn.type = "button";
     pasteBtn.addEventListener("click", function () { startCredentialPaste(vendor); });
     row.appendChild(pasteBtn);
@@ -60,19 +60,19 @@
   function beginCaptchaLogin(vendor, variant) {
     var status = document.getElementById("loginStatus");
     setLoginVariantBusy(true);
-    status.textContent = "正在准备人机验证…";
+    status.textContent = t("正在准备人机验证…");
     resetLoginCaptcha();
     api("GET", "/login/captcha-config?vendor=" + encodeURIComponent(vendor.id)).then(function (data) {
-      if (!data || !data.ok) throw new Error((data && data.message) || "获取风控验证配置失败");
+      if (!data || !data.ok) throw new Error((data && data.message) || t("获取风控验证配置失败"));
       var config = data.captcha || {};
-      if (!config.enabled) throw new Error("上游没有开启网页登录，请改用「粘贴凭证」");
-      if (!config.scene_id || !config.prefix) throw new Error("上游返回的风控配置不完整，请稍后重试");
-      status.textContent = "请在弹出的滑块中完成验证（官方要求的风控步骤）。";
+      if (!config.enabled) throw new Error(t("上游没有开启网页登录，请改用「粘贴凭证」"));
+      if (!config.scene_id || !config.prefix) throw new Error(t("上游返回的风控配置不完整，请稍后重试"));
+      status.textContent = t("请在弹出的滑块中完成验证（官方要求的风控步骤）。");
       return runLoginCaptcha(config, function (verifyParam) {
         return requestLoginURL(vendor, variant, verifyParam);
       });
     }).catch(function (err) {
-      status.textContent = "登录失败：" + ((err && err.message) || err);
+      status.textContent = t("登录失败：") + ((err && err.message) || err);
       resetLoginCaptcha();
       setLoginVariantBusy(false);
     });
@@ -81,7 +81,7 @@
   // requestLoginURL 用验证令牌换授权地址，并把粘贴回调的入口展开。
   function requestLoginURL(vendor, variant, verifyParam) {
     var status = document.getElementById("loginStatus");
-    status.textContent = "人机验证通过，正在获取授权链接…";
+    status.textContent = t("人机验证通过，正在获取授权链接…");
     return api("POST", "/login/start", {
       vendor_id: vendor.id,
       metadata: {
@@ -89,20 +89,20 @@
         ali_captcha_verify_param: verifyParam
       }
     }).then(function (data) {
-      if (!data || !data.ok) throw new Error((data && data.message) || "获取授权链接失败");
-      if (!data.url) throw new Error("上游没有返回授权链接，请重试");
+      if (!data || !data.ok) throw new Error((data && data.message) || t("获取授权链接失败"));
+      if (!data.url) throw new Error(t("上游没有返回授权链接，请重试"));
       currentLoginState = data.state || "";
       document.getElementById("loginUrl").value = data.url;
       var hint = data.callback_hint || variant.callback_hint || "";
       var pasteBox = document.getElementById("loginPasteBox");
       if (pasteBox) pasteBox.hidden = false;
       document.getElementById("loginPasteHint").textContent =
-        "登录完成后浏览器会停在 " + (hint || "http://localhost/ 的回调地址") +
-        "。远程 / Docker 部署下这个地址打不开是正常的，把地址栏里的整条链接复制后粘贴到下面提交。";
+        t("登录完成后浏览器会停在 ") + (hint || t("http://localhost/ 的回调地址")) +
+        t("。远程 / Docker 部署下这个地址打不开是正常的，把地址栏里的整条链接复制后粘贴到下面提交。");
       document.getElementById("loginPasteUrl").value = "";
       document.getElementById("loginPasteStatus").textContent = "";
       document.getElementById("btnSubmitCallback").disabled = false;
-      status.textContent = "请打开下面的链接完成 " + variant.label + " 登录。";
+      status.textContent = t("请打开下面的链接完成 ") + variant.label + t(" 登录。");
       // 授权地址已经拿到，滑块流程到此结束（凭证等下一条粘贴请求）。
       // 这里**不立刻 destroy**：当前还在 SDK 的 captchaVerifyCallback 里，
       // 先让它收到 bizResult=true 自己收起滑块；实例留到下一次发起/取消时清。
@@ -111,7 +111,7 @@
     }).catch(function (err) {
       // 不收起滑块：验证令牌是一次性的，换地址失败（多为 630014 已过期）
       // 让用户直接再拖一次比重新点入口更快。错误原因写在同一行。
-      status.textContent = "获取授权链接失败：" + ((err && err.message) || err);
+      status.textContent = t("获取授权链接失败：") + ((err && err.message) || err);
       throw err;
     });
   }
@@ -159,7 +159,7 @@
           return true;
         }
         flow.timer = setTimeout(function () {
-          settle(function () { reject(new Error("验证码组件初始化超时，请重试")); });
+          settle(function () { reject(new Error(t("验证码组件初始化超时，请重试"))); });
         }, 40000);
         try {
           window.initAliyunCaptcha({
@@ -194,7 +194,7 @@
               // 只有初始化阶段可以靠这个 reject；验证阶段的失败已经由
               // onVerify 的 catch 报在页面上，SDK 会让用户重试。
               if (!flow.instance) {
-                settle(function () { reject(new Error((err && err.message) || "验证码组件不可用，请重试")); });
+                settle(function () { reject(new Error((err && err.message) || t("验证码组件不可用，请重试"))); });
               }
             }
           });
@@ -212,7 +212,7 @@
       // SDK 面板右上角的关闭不回调，没人拖动时这里就是唯一能复原界面的地方。
       setTimeout(function () {
         if (generation !== loginCaptchaGeneration || flow.verified) return;
-        document.getElementById("loginStatus").textContent = "验证码等待超时，请重新点击登录再试一次";
+        document.getElementById("loginStatus").textContent = t("验证码等待超时，请重新点击登录再试一次");
         resetLoginCaptcha();
         setLoginVariantBusy(false);
       }, 120000);
@@ -273,15 +273,17 @@
     if (login) login.hidden = true;
     if (apiKey) apiKey.hidden = true;
     box.hidden = false;
-    document.getElementById("smsTitle").textContent = "添加 " + vendor.name + " 账号（手机验证码登录）";
+    document.getElementById("smsTitle").textContent = t("添加 ") + providerName(vendor.name) + t(" 账号（手机验证码登录）");
     document.getElementById("inputSmsPhone").value = "";
     document.getElementById("inputSmsCode").value = "";
     document.getElementById("inputSmsLabel").value = "";
-    document.getElementById("smsStatus").textContent = "输入手机号获取验证码。";
+    document.getElementById("smsStatus").textContent = t("输入手机号获取验证码。");
     document.getElementById("inputSmsPhone").focus();
   }
 
   function startLogin(vendor) {
+    // 百度搭子不走设备授权：服务器代取二维码会被百度判失效，直接进 Cookie 粘贴框。
+    if (vendor && vendor.id === "dumate") { openVendorCredentialBox(vendor); return; }
     if (vendor && vendor.sms_login) { startSmsLogin(vendor); return; }
     resetLoginCaptcha();
     clearLoginVariants();
@@ -294,21 +296,13 @@
     stopLoginPolling();
     currentLoginState = "";
     var box = document.getElementById("loginBox");
-    document.getElementById("loginTitle").textContent =
-      (vendor && vendor.id === "dumate") ? ("登录 " + vendor.name) : "完成授权";
+    document.getElementById("loginTitle").textContent = t("完成授权");
     var urlField = document.getElementById("loginUrl");
     var status = document.getElementById("loginStatus");
     var pasteBox = document.getElementById("loginPasteBox");
     box.hidden = false;
-    // 清掉上一次可能残留的二维码，避免扫码框和链接框同时露出来。
-    var qrReset = document.getElementById("loginQrBox");
-    if (qrReset) qrReset.hidden = true;
-    var qrImgReset = document.getElementById("loginQrImg");
-    if (qrImgReset) qrImgReset.removeAttribute("src");
-    var urlRowReset = document.getElementById("loginUrlRow");
-    if (urlRowReset) urlRowReset.hidden = false;
     urlField.value = "";
-    status.textContent = "正在获取授权链接…";
+    status.textContent = t("正在获取授权链接…");
 
     // 粘贴兜底只对「上游只认 localhost 回调」的供应商有意义（Trae / CodeArts）：
     // 别的供应商没有本机回调，展开它只会让人以为可以往这里贴东西。
@@ -318,9 +312,9 @@
     if (canPaste) {
       var hint = ((vendor && vendor.callback_hint) || "").trim() || "http://127.0.0.1/";
       document.getElementById("loginPasteHint").textContent =
-        "上游只认本机回调地址 " + hint +
-        "。与插件同一台机器时直接点「打开链接」即可；远程 / Docker 部署时浏览器会停在该地址上，" +
-        "把地址栏里的整条链接复制后粘贴到下面提交。";
+        t("上游只认本机回调地址 ") + hint +
+        t("。与插件同一台机器时直接点「打开链接」即可；远程 / Docker 部署时浏览器会停在该地址上，") +
+        t("把地址栏里的整条链接复制后粘贴到下面提交。");
       document.getElementById("loginPasteUrl").value = "";
       document.getElementById("loginPasteStatus").textContent = "";
       document.getElementById("btnSubmitCallback").disabled = false;
@@ -329,50 +323,18 @@
     // 供应商经 metadata 传给插件：宿主按路径解析 provider（/freetier-auth-url），
     // 插件再按 vendor 参数选具体供应商实例。路径里不能带 vendor——
     // 宿主会把它当成 provider 名去校验，直接 404。
-    // 搭子走插件自己的 /login/start：它需要带回二维码图片地址（qr_image_url），
-    // 宿主的 <provider>-auth-url 只透传 url/state，扫码框就渲染不出来。
-    var request;
-    if (vendor.id === "dumate") {
-      request = api("POST", "/login/start", { vendor_id: vendor.id, metadata: {} });
-    } else {
-      request = api("GET", hostPath("/freetier-auth-url?vendor=" + encodeURIComponent(vendor.id)));
-    }
-    request.then(function (data) {
+    api("GET", hostPath("/freetier-auth-url?vendor=" + encodeURIComponent(vendor.id))).then(function (data) {
       if (!data || !data.url) {
-        status.textContent = "获取授权链接失败：" + ((data && (data.message || data.error)) || "响应缺少 url");
+        status.textContent = t("获取授权链接失败：") + ((data && data.error) || t("响应缺少 url"));
         return;
       }
       urlField.value = data.url;
-      var qrBox = document.getElementById("loginQrBox");
-      var urlRow = document.getElementById("loginUrlRow");
-      if (data.qr_image_url) {
-        // 扫码登录：url 本身就是二维码图片地址，直接渲染给用户扫。
-        document.getElementById("loginQrImg").src = data.qr_image_url;
-        document.getElementById("loginQrHint").textContent = data.hint || "用百度 App 扫码登录";
-        if (qrBox) qrBox.hidden = false;
-        if (urlRow) urlRow.hidden = true;
-        status.textContent = "请用百度 App 扫码，并在手机上点「确认登录」。";
-        // 扫码不可用时（手机没装百度 App / 想换账号），保留粘贴 Cookie 兜底。
-        if (vendor.id === "dumate") {
-          var row = document.getElementById("loginVariantRow");
-          row.textContent = "";
-          row.hidden = false;
-          row.style.display = "flex";
-          var fallback = el("button", "改用粘贴 Cookie", "act");
-          fallback.type = "button";
-          fallback.addEventListener("click", function () { openVendorCredentialBox(vendor); });
-          row.appendChild(fallback);
-        }
-      } else {
-        if (qrBox) qrBox.hidden = true;
-        if (urlRow) urlRow.hidden = false;
-        status.textContent = "请打开下面的链接完成授权，页面会自动检测结果。";
-      }
+      status.textContent = t("请打开下面的链接完成授权，页面会自动检测结果。");
       var state = data.state || "";
       currentLoginState = state;
       if (state) pollLogin(state);
     }).catch(function (err) {
-      status.textContent = "获取授权链接失败：" + err.message;
+      status.textContent = t("获取授权链接失败：") + err.message;
     });
   }
 
@@ -385,7 +347,7 @@
       // 设备授权一般几十秒内完成；超过 5 分钟就放弃轮询。
       if (attempts > 150) {
         stopLoginPolling();
-        status.textContent = "授权超时，请重新发起登录。";
+        status.textContent = t("授权超时，请重新发起登录。");
         return;
       }
       api("GET", hostPath("/get-auth-status?state=" + encodeURIComponent(state))).then(function (data) {
@@ -393,8 +355,8 @@
         if (value === "ok") {
           stopLoginPolling();
           currentLoginState = "";
-          status.textContent = "授权成功，账号已写入 CPA。";
-          banner("ok", "账号添加成功，正在查询该账号额度…");
+          status.textContent = t("授权成功，账号已写入 CPA。");
+          banner("ok", t("账号添加成功，正在查询该账号额度…"));
           // loadQuotas 结束时会自己重拉账号表（新账号只有查过额度才不在
           // 「查询中」），因此这里不再额外 loadStatus。
           loadQuotas(true);
@@ -402,13 +364,13 @@
         }
         if (value === "error") {
           stopLoginPolling();
-          status.textContent = "授权失败：" + ((data && data.error) || "未知原因");
+          status.textContent = t("授权失败：") + ((data && data.error) || t("未知原因"));
           return;
         }
-        status.textContent = ((data && data.message) || "等待授权中…") + "（已等待 " + attempts * 2 + " 秒）";
+        status.textContent = t("等待授权中…（已等待 ") + attempts * 2 + t(" 秒）");
       }).catch(function (err) {
         stopLoginPolling();
-        status.textContent = "轮询失败：" + err.message;
+        status.textContent = t("轮询失败：") + err.message;
       });
     }, 2000);
   }
@@ -429,9 +391,9 @@
     field.select();
     try {
       navigator.clipboard.writeText(field.value);
-      document.getElementById("loginStatus").textContent = "链接已复制。";
+      document.getElementById("loginStatus").textContent = t("链接已复制。");
     } catch (e) {
-      document.getElementById("loginStatus").textContent = "复制失败，请手动选中复制。";
+      document.getElementById("loginStatus").textContent = t("复制失败，请手动选中复制。");
     }
   });
   document.getElementById("btnLoginCancel").addEventListener("click", function () {
@@ -454,23 +416,23 @@
     var btn = document.getElementById("btnSubmitCallback");
     var raw = document.getElementById("loginPasteUrl").value.trim();
     if (!currentLoginState) {
-      pasteStatus.textContent = "登录会话已结束，请重新发起登录后再粘贴。";
+      pasteStatus.textContent = t("登录会话已结束，请重新发起登录后再粘贴。");
       return;
     }
     if (!raw) {
-      pasteStatus.textContent = "请先粘贴浏览器地址栏里的整条链接。";
+      pasteStatus.textContent = t("请先粘贴浏览器地址栏里的整条链接。");
       return;
     }
     // 立即停止后台设备授权轮询：用户已经拿到并提交了回调，不再需要并发轮询，
     // 防止换票完成、会话销毁后，未退出的轮询请求误报「会话不存在或已过期」。
     stopLoginPolling();
     btn.disabled = true;
-    btn.textContent = "提交中…";
+    btn.textContent = t("提交中…");
     redirect.hidden = true;
     var submittedState = currentLoginState;
     api("POST", "/login/callback", { state: submittedState, url: raw }).then(function (data) {
       btn.disabled = false;
-      btn.textContent = "提交回调链接";
+      btn.textContent = t("提交回调链接");
       var value = (data && data.status) || "";
       var message = (data && data.message) || (data && data.error) || "";
       if (value === "success") {
@@ -479,9 +441,9 @@
         currentLoginState = "";
         resetLoginCaptcha();
         clearLoginVariants();
-        pasteStatus.textContent = message || "解析成功，正在写入账号…";
-        document.getElementById("loginStatus").textContent = "授权成功，账号已写入 CPA。";
-        banner("ok", "账号添加成功，正在查询该账号额度…");
+        pasteStatus.textContent = message || t("解析成功，正在写入账号…");
+        document.getElementById("loginStatus").textContent = t("授权成功，账号已写入 CPA。");
+        banner("ok", t("账号添加成功，正在查询该账号额度…"));
         loadQuotas(true);
         setTimeout(function () {
           var box = document.getElementById("loginBox");
@@ -489,7 +451,7 @@
         }, 1500);
         return;
       }
-      pasteStatus.textContent = message || "回调链接暂时无法完成登录，请重新发起登录后重试。";
+      pasteStatus.textContent = message || t("回调链接暂时无法完成登录，请重新发起登录后重试。");
       // CodeArts：票据尚未换到凭证，需要在能联网的浏览器里打开门户登录页。
       if (data && data.redirect_url) {
         redirect.href = data.redirect_url;
@@ -497,8 +459,8 @@
       }
     }).catch(function (err) {
       btn.disabled = false;
-      btn.textContent = "提交回调链接";
-      pasteStatus.textContent = "提交失败：" + (err.message || err);
+      btn.textContent = t("提交回调链接");
+      pasteStatus.textContent = t("提交失败：") + (err.message || err);
     });
   }
 
@@ -509,22 +471,22 @@
     var status = document.getElementById("smsStatus");
     var phone = document.getElementById("inputSmsPhone").value.trim();
     var btn = document.getElementById("btnSmsSend");
-    if (!currentSmsVendor) { status.textContent = "请先重新打开添加面板。"; return; }
-    if (!phone) { status.textContent = "请先填写手机号。"; return; }
-    btn.disabled = true; btn.textContent = "发送中…";
-    status.textContent = "正在发送验证码…";
+    if (!currentSmsVendor) { status.textContent = t("请先重新打开添加面板。"); return; }
+    if (!phone) { status.textContent = t("请先填写手机号。"); return; }
+    btn.disabled = true; btn.textContent = t("发送中…");
+    status.textContent = t("正在发送验证码…");
     api("POST", "/login/sms/send", { vendor_id: currentSmsVendor.id, phone: phone }).then(function (data) {
-      btn.disabled = false; btn.textContent = "发送验证码";
+      btn.disabled = false; btn.textContent = t("发送验证码");
       if (data && data.ok) {
         smsSessionKey = (data.session_key || "");
-        status.textContent = data.message || "验证码已发送。";
+        status.textContent = data.message || t("验证码已发送。");
         document.getElementById("inputSmsCode").focus();
       } else {
-        status.textContent = (data && data.message) || "发送失败，请稍后重试。";
+        status.textContent = (data && data.message) || t("发送失败，请稍后重试。");
       }
     }).catch(function (err) {
-      btn.disabled = false; btn.textContent = "发送验证码";
-      status.textContent = "发送失败：" + err.message;
+      btn.disabled = false; btn.textContent = t("发送验证码");
+      status.textContent = t("发送失败：") + err.message;
     });
   });
 
@@ -534,23 +496,23 @@
     var code = document.getElementById("inputSmsCode").value.trim();
     var label = document.getElementById("inputSmsLabel").value.trim();
     var btn = document.getElementById("btnSmsVerify");
-    if (!currentSmsVendor) { status.textContent = "请先重新打开添加面板。"; return; }
-    if (!phone || !code) { status.textContent = "请填写手机号与短信验证码。"; return; }
-    btn.disabled = true; btn.textContent = "登录中…";
-    status.textContent = "正在验证并添加账号…";
+    if (!currentSmsVendor) { status.textContent = t("请先重新打开添加面板。"); return; }
+    if (!phone || !code) { status.textContent = t("请填写手机号与短信验证码。"); return; }
+    btn.disabled = true; btn.textContent = t("登录中…");
+    status.textContent = t("正在验证并添加账号…");
     api("POST", "/login/sms/verify", { vendor_id: currentSmsVendor.id, session_key: smsSessionKey, phone: phone, code: code, label: label }).then(function (data) {
-      btn.disabled = false; btn.textContent = "登录并添加";
+      btn.disabled = false; btn.textContent = t("登录并添加");
       if (data && data.ok) {
         document.getElementById("smsBox").hidden = true;
         currentSmsVendor = null;
-        banner("ok", (data.message || "账号添加成功") + "：" + (data.auth_id || ""));
+        banner("ok", (data.message || t("账号添加成功")) + "：" + (data.auth_id || ""));
         loadQuotas(true);
       } else {
-        status.textContent = (data && data.message) || "登录失败，请检查验证码后重试。";
+        status.textContent = (data && data.message) || t("登录失败，请检查验证码后重试。");
       }
     }).catch(function (err) {
-      btn.disabled = false; btn.textContent = "登录并添加";
-      status.textContent = "登录失败：" + err.message;
+      btn.disabled = false; btn.textContent = t("登录并添加");
+      status.textContent = t("登录失败：") + err.message;
     });
   });
 
@@ -569,12 +531,12 @@
     var apiKey = (document.getElementById("inputApiKey").value || "").trim();
     var label = (document.getElementById("inputApiLabel").value || "").trim();
     if (!apiKey) {
-      banner("err", "API Key 不能为空");
+      banner("err", t("API Key 不能为空"));
       return;
     }
     var btn = document.getElementById("btnSubmitApiKey");
     btn.disabled = true;
-    btn.textContent = "保存中…";
+    btn.textContent = t("保存中…");
     var payload = { vendor: currentApiKeyVendor.id, label: label };
     if (currentApiKeyVendor.id === "autoclawglobal") {
       // AutoClaw 国际版：输入框里是凭证 JSON（访问令牌/刷新令牌）。
@@ -587,19 +549,19 @@
     }
     api("POST", "/accounts/add", payload).then(function (res) {
       btn.disabled = false;
-      btn.textContent = "保存账号";
+      btn.textContent = t("保存账号");
       if (!res || !res.ok) {
-        banner("err", (res && res.error) || "保存失败");
+        banner("err", (res && res.error) || t("保存失败"));
         return;
       }
-      banner("ok", res.message || "账号添加成功");
+      banner("ok", res.message || t("账号添加成功"));
       document.getElementById("apiKeyBox").hidden = true;
       currentApiKeyVendor = null;
       loadStatus(true).catch(function () { });
     }).catch(function (err) {
       btn.disabled = false;
-      btn.textContent = "保存账号";
-      banner("err", err.message || "保存失败");
+      btn.textContent = t("保存账号");
+      banner("err", err.message || t("保存失败"));
     });
   });
 
@@ -621,19 +583,19 @@
     var btn = this;
     var ids = selectedAccountIDs();
     btn.disabled = true;
-    banner("ok", "正在发起 " + (ids.length ? ids.length + " 个账号" : "全账号") + " 的 Token 续期刷新，请稍候…", 0);
+    banner("ok", t("正在发起 ") + (ids.length ? ids.length + t(" 个账号") : t("全账号")) + t(" 的 Token 续期刷新，请稍候…"), 0);
     api("POST", "/keepalive", { account_ids: ids }).then(function (res) {
       if (!res) return;
       if (res.failed > 0 && res.succeeded === 0) {
-        banner("err", "Token 续期失败：" + (res.message || "上游拒绝"));
+        banner("err", t("Token 续期失败：") + (res.message || t("上游拒绝")));
       } else if (res.failed > 0) {
-        banner("warn", res.message || ("Token 续期部分成功：" + res.succeeded + " 成功，" + res.failed + " 失败"));
+        banner("warn", res.message || (t("Token 续期部分成功：") + res.succeeded + t(" 成功，") + res.failed + t(" 失败")));
       } else {
-        banner("ok", res.message || "全账号 Token 续期成功");
+        banner("ok", res.message || t("全账号 Token 续期成功"));
       }
       return loadStatus(true);
     }).catch(function (err) {
-      banner("err", "Token 续期请求失败：" + err.message);
+      banner("err", t("Token 续期请求失败：") + err.message);
     }).then(function () {
       btn.disabled = false;
     });

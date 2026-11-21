@@ -206,6 +206,69 @@ type UpstreamError struct {
 
 func (e *UpstreamError) Error() string { return e.Message }
 
+// HTTPStatus 实现 core.UpstreamError：宿主据此决定给客户端的状态码。
+//
+// 排队（model_busy）必须是 503 而不是 502：客户端把 502 当服务器故障会立刻
+// 重打，正好加剧高峰；503 + Retry-After 才是「等一会再来」的正确信号。
+func (e *UpstreamError) HTTPStatus() int {
+	if e == nil {
+		return http.StatusBadGateway
+	}
+	switch e.ErrType {
+	case ErrTypeModelBusy:
+		return http.StatusServiceUnavailable
+	case ErrTypeContentPolicy:
+		return http.StatusBadRequest
+	}
+	if e.Status >= http.StatusBadRequest {
+		return e.Status
+	}
+	return http.StatusBadGateway
+}
+
+// Retryable 实现 core.UpstreamError：是否值得换一把凭证重试同一请求。
+//
+// 排队是模型级的、与账号无关，换号只会再排一次队，所以不重试，交给客户端
+// 按 Retry-After 退避；内容审核重试也无意义。
+func (e *UpstreamError) Retryable() bool {
+	if e == nil {
+		return false
+	}
+	switch e.ErrType {
+	case ErrTypeModelBusy, ErrTypeContentPolicy:
+		return false
+	}
+	status := e.HTTPStatus()
+	return status >= http.StatusInternalServerError || status == http.StatusTooManyRequests
+}
+
+// UpstreamKind 实现 core.UpstreamError：错误分类标识（日志与错误码用）。
+func (e *UpstreamError) UpstreamKind() string {
+	if e == nil {
+		return core.FailureKindTransient.String()
+	}
+	switch e.ErrType {
+	case ErrTypeModelBusy:
+		return core.FailureKindBusy.String()
+	case ErrTypeContentPolicy:
+		return core.FailureKindContentBlocked.String()
+	}
+	return core.ClassifyStatus(e.HTTPStatus()).String()
+}
+
+// RetryAfter 实现 core.RetryHinter：把上游建议的等待时长交给宿主，
+// 最终变成响应头 Retry-After。没排队信号时返回 0（不发头）。
+func (e *UpstreamError) RetryAfter() time.Duration {
+	if e == nil || e.Queue == nil {
+		return 0
+	}
+	seconds := e.Queue.retryAfter()
+	if seconds <= 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
+}
+
 // FriendlyUpstreamError 把上游错误转成对客户端可读的消息；瞬时故障给出重试指引。
 // 返回 (message, errType)。与 hub friendly_upstream_error 逐句对齐。
 func FriendlyUpstreamError(code int, detail string) (string, string) {

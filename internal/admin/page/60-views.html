@@ -3,13 +3,13 @@
   document.getElementById("btnUseKey").addEventListener("click", function () {
     if (keyBusy) return;
     if (Date.now() < keyRetryAfter) {
-      banner("warn", "密钥刚验证失败，请稍候几秒再试（CPA 按 IP 统计失败次数，不能连续重试）。");
+      banner("warn", t("密钥刚验证失败，请稍候几秒再试（CPA 按 IP 统计失败次数，不能连续重试）。"));
       return;
     }
     var input = document.getElementById("keyInput");
     var value = (input.value || "").trim();
-    if (!value) { banner("err", "请先填入管理密钥"); return; }
-    if (!KEY_RE.test(value)) { banner("err", "管理密钥只能包含可见 ASCII 字符"); return; }
+    if (!value) { banner("err", t("请先填入管理密钥")); return; }
+    if (!KEY_RE.test(value)) { banner("err", t("管理密钥只能包含可见 ASCII 字符")); return; }
 
     // 先发**一个**探针请求验证；通过后才记忆并加载数据。失败就到此为止，
     // 绝不把首屏请求全打出去（那会正好撞上 CPA 的 5 次封禁阈值）。
@@ -17,15 +17,15 @@
     manualKey = value;
     stopped = false;
     authReady = false;
-    setKeyStatus("正在验证密钥…");
+    setKeyStatus(t("正在验证密钥…"));
     probeManagementAuth().then(function (ok) {
       keyBusy = false;
       if (!ok) {
         manualKey = "";
         keyRetryAfter = Date.now() + 10000;
         revealKeyInput();
-        setKeyStatus("密钥无效，请重新输入（面板勾选「记住密码」可免输）");
-        if (!stopped) banner("err", "密钥验证失败：请求未能通过 CPA 鉴权。");
+        setKeyStatus(t("密钥无效，请重新输入（面板勾选「记住密码」可免输）"));
+        if (!stopped) banner("err", t("密钥验证失败：请求未能通过 CPA 鉴权。"));
         return;
       }
       // 只在本标签页记住（关闭即失效），且必须是验证过的值。
@@ -33,7 +33,7 @@
       authReady = true;
       input.value = "";
       document.getElementById("keyBox").hidden = true;
-      setKeyStatus("已使用手动填入的密钥");
+      setKeyStatus(t("已使用手动填入的密钥"));
       clearBanner();
       startConsole();
     });
@@ -88,15 +88,25 @@
       return;
     }
 
-    // API Key / Cookie 型供应商：直接在页面展示输入框添加
-    openVendorCredentialBox(vendor);
+    // API Key 型供应商：直接在页面展示输入框添加
+    if (loginBox) loginBox.hidden = true;
+    var smsBox = document.getElementById("smsBox");
+    if (smsBox) smsBox.hidden = true;
+    currentApiKeyVendor = vendor;
+    if (apiKeyBox) {
+      apiKeyBox.hidden = false;
+      document.getElementById("apiKeyTitle").textContent = t("添加 ") + providerName(vendor.name) + t(" 账号");
+      document.getElementById("apiKeyHint").textContent = t("请输入从官网申请的 API Key，保存后插件将自动在 auth 目录创建凭证文件。");
+      document.getElementById("inputApiKey").value = "";
+      document.getElementById("inputApiLabel").value = "";
+      document.getElementById("inputApiKey").focus();
+    }
   }
 
-  // openVendorCredentialBox 展示「单输入框」凭证添加卡片。
+  // openVendorCredentialBox 展示「单输入框」凭证添加卡片（百度搭子专用）。
   //
-  // API Key 型供应商（OpenCode ZEN 等）填 key；搭子填 Cookie——
-  // 搭子网页端不签发长期 key，保存时会被包成 credential_json 交给插件解析。
-  // BAIDU_LOGIN_URL 是百度统一登录页（智能云 BCE 的入口）。
+  // 搭子网页端不签发长期 key，它认的是浏览器里的百度云登录态，所以填的是 Cookie；
+  // 保存时会被包成 credential_json 交给插件解析。
   //
   // 用官方页面而不是自己造二维码：服务器取码是机房 IP、没有 BAIDUID 会话，
   // 百度侧会把扫上来的码直接判失效；而打开官方页，账号密码 / 短信 / 手机端
@@ -124,46 +134,42 @@
     var inputEl = document.getElementById("inputApiKey");
     var actionsEl = document.getElementById("apiKeyActions");
     if (actionsEl) actionsEl.textContent = "";
-    titleEl.textContent = "添加 " + vendor.name + " 账号";
+    titleEl.textContent = t("添加 ") + providerName(vendor.name) + t(" 账号");
     if (vendor.id === "dumate") {
       // Cookie 很长，用 text 而不是 password：看不见内容根本没法核对有没有粘全。
       inputEl.type = "text";
-      inputEl.setAttribute("placeholder", "粘贴整行 Cookie，或整段请求头（Copy request headers）");
+      inputEl.setAttribute("placeholder", t("粘贴整行 Cookie，或整段请求头（Copy request headers）"));
       hintEl.innerHTML =
-        "搭子没有长期 API Key，它认的是你浏览器里的百度云登录态。<b>两步都要做，缺一步一定失败。</b><br>" +
-        "① 点「登录百度」完成登录（账号密码 / 短信 / 手机百度扫码都行）；<br>" +
-        "② 再点「打开搭子控制台」，等页面加载出来 —— 这一步会种下 <b>bce-long-term-sessionid</b>，" +
-        "只登录不打开控制台就没有它，之后所有请求都会报「登录已经过期」；<br>" +
-        "③ 在控制台页按 <b>F12</b> → <b>Network</b> → 点任意一个发往 <b>bce.baidu.com</b> 的请求，" +
-        "右键 <b>Copy → Copy request headers</b>，整段粘到上面的输入框；<br>" +
-        "④ 点「保存账号」。插件会自动抠出 Cookie、验证并换取网关票据。";
+        t("搭子没有长期 API Key，它认的是你浏览器里的百度云登录态。两步都要做，缺一步一定失败。") + "<br>" +
+        t("① 点「登录百度」完成登录（账号密码 / 短信 / 手机百度扫码都行）；") + "<br>" +
+        t("② 再点「打开搭子控制台」，等页面加载出来 —— 这一步会种下 bce-long-term-sessionid，只登录不打开控制台就没有它，之后所有请求都会报「登录已经过期」；") + "<br>" +
+        t("③ 在控制台页按 F12 → Network → 点任意一个发往 bce.baidu.com 的请求，右键 Copy → Copy request headers，整段粘到上面的输入框；") + "<br>" +
+        t("④ 点「保存账号」。插件会自动抠出 Cookie、验证并换取网关票据。");
       if (actionsEl) {
-        var openBtn = el("button", "① 登录百度", "act primary");
+        var openBtn = el("button", t("① 登录百度"), "act primary");
         openBtn.type = "button";
         openBtn.addEventListener("click", function () {
           window.open(BAIDU_LOGIN_URL, "_blank", "noopener,noreferrer");
         });
         actionsEl.appendChild(openBtn);
-        var consoleBtn = el("button", "② 打开搭子控制台", "act primary");
+        var consoleBtn = el("button", t("② 打开搭子控制台"), "act primary");
         consoleBtn.type = "button";
         consoleBtn.addEventListener("click", function () {
           window.open(DUMATE_CONSOLE_URL, "_blank", "noopener,noreferrer");
         });
         actionsEl.appendChild(consoleBtn);
-        var helpBtn = el("button", "怎么复制？", "act");
+        var helpBtn = el("button", t("怎么复制？"), "act");
         helpBtn.type = "button";
         helpBtn.addEventListener("click", function () {
           banner("warn",
-            "在搭子控制台页按 F12 → Network → 刷新一下 → 点列表里任意一个 bce.baidu.com 的请求 → " +
-            "右键 Copy → Copy request headers → 整段粘贴到输入框（插件自动提取，不用手动挑字段）。" +
-            "iPhone / 手机上没法看开发者工具，这一步请在电脑浏览器里做一次。");
+            t("在搭子控制台页按 F12 → Network → 刷新一下 → 点列表里任意一个 bce.baidu.com 的请求 → 右键 Copy → Copy request headers → 整段粘贴到输入框（插件自动提取，不用手动挑字段）。iPhone / 手机上没法看开发者工具，这一步请在电脑浏览器里做一次。"));
         });
         actionsEl.appendChild(helpBtn);
       }
     } else {
       inputEl.type = "password";
-      inputEl.setAttribute("placeholder", "输入 API Key（必填）");
-      hintEl.textContent = "请输入从官网申请的 API Key，保存后插件将自动在 auth 目录创建凭证文件。";
+      inputEl.setAttribute("placeholder", t("输入 API Key（必填）"));
+      hintEl.textContent = t("请输入从官网申请的 API Key，保存后插件将自动在 auth 目录创建凭证文件。");
     }
     inputEl.value = "";
     document.getElementById("inputApiLabel").value = "";
@@ -187,10 +193,10 @@
     // 复用同一个卡片：先把搭子专用的按钮条清空，避免串味。
     var pasteActions = document.getElementById("apiKeyActions");
     if (pasteActions) pasteActions.textContent = "";
-    document.getElementById("apiKeyTitle").textContent = "粘贴 " + vendor.name + " 凭证";
+    document.getElementById("apiKeyTitle").textContent = t("粘贴 ") + providerName(vendor.name) + t(" 凭证");
     document.getElementById("apiKeyHint").textContent =
-      "粘贴 AutoClaw 国际版凭证 JSON（含访问令牌与刷新令牌，可从 AutoClaw 桌面端登录态文件或 Agent2API 获取）。" +
-      "保存后插件会自动续期。";
+      t("粘贴 AutoClaw 国际版凭证 JSON（含访问令牌与刷新令牌，可从 AutoClaw 桌面端登录态文件或 Agent2API 获取）。") +
+      t("保存后插件会自动续期。");
     document.getElementById("inputApiKey").value = "";
     document.getElementById("inputApiLabel").value = "";
     document.getElementById("inputApiKey").focus();

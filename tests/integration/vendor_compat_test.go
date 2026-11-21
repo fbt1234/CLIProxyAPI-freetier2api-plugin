@@ -95,8 +95,8 @@ func TestVendorCapabilities(t *testing.T) {
 		"traeglobal":      {credits: true, login: true, refresh: true, quota: true, checkin: true, tasks: true, merge: true, configure: true},
 		"workbuddycn":     {credits: true, login: true, refresh: true, quota: true, checkin: true, tasks: true, models: true, merge: true, configure: true, console: true},
 		"workbuddyglobal": {credits: true, login: true, refresh: true, quota: true, checkin: true, tasks: true, models: true, merge: true, configure: true, console: true},
-		"zcodecn":         {login: true, refresh: true, quota: true, merge: true, configure: true, authMode: "oauth"},
-		"zcodeglobal":     {login: true, refresh: true, quota: true, merge: true, configure: true, authMode: "oauth"},
+		"zcodecn":         {credits: true, login: true, refresh: true, quota: true, merge: true, configure: true, authMode: "oauth"},
+		"zcodeglobal":     {credits: true, login: true, refresh: true, quota: true, merge: true, configure: true, authMode: "oauth"},
 	}
 	for _, vendor := range testApp.Registry().Vendors() {
 		expected, okCase := cases[vendor.ID()]

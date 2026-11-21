@@ -174,7 +174,9 @@ globalThis.localStorage = {
   setItem: function (k, v) { store[k] = v; },
 };
 const warnings = [];
-const page = new Function('console', block + ';return {panelAuthKey: panelAuthKey};')({
+// 页面里的告警文案现在走 t() 翻译层；块本身不含 t 的定义，这里给个恒等桩，
+// 保证抽出来的 panelAuthKey 在 node 里行为与线上（中文模式）一致。
+const page = new Function('console', 'const t = function (s) { return s; }; ' + block + ';return {panelAuthKey: panelAuthKey};')({
   warn: function () { warnings.push(Array.prototype.join.call(arguments, ' ')); },
   log: function () {},
 });
@@ -775,7 +777,7 @@ func TestConsoleAccountsTableSupportsBatchSelection(t *testing.T) {
 	page := Page("/plugins/freetier")
 
 	for _, literal := range []string{
-		`["", "状态", "供应商", "账号", "签到", "剩余 / 总额", "剩余率", "刷新时间"]`,
+		`["", t("状态"), t("供应商"), t("账号"), t("签到"), t("剩余 / 总额"), t("剩余率"), t("刷新时间")]`,
 		"function accountCheckCell(account)",
 		`id="btnDeleteAccounts"`,
 		`id="btnDisableAccounts"`,
@@ -841,8 +843,8 @@ func TestConsoleAccountAndModelStatusLabels(t *testing.T) {
 	for _, want := range []string{
 		`<button class="act" id="btnDisableAccounts">停用选中</button>`,
 		`<button class="act" id="btnDisableModels">停用选中</button>`,
-		`account.disabled ? pill("停用", "err") : pill("启用", "ok")`,
-		`model.disabled ? pill("停用", "err") : pill("启用", "ok")`,
+		`account.disabled ? pill(language === "en" ? "Disabled" : "停用", "err") : pill(language === "en" ? "Enabled" : "启用", "ok")`,
+		`model.disabled ? pill(language === "en" ? "Disabled" : "停用", "err") : pill(language === "en" ? "Enabled" : "启用", "ok")`,
 		`// 排序：状态 + 供应商名称 + 账号 ID（启用在上，停用在下；同状态内按 供应商名称 + 账号 ID 升序）`,
 	} {
 		if !strings.Contains(page, want) {
@@ -897,7 +899,7 @@ func TestConsoleAutoAllCoversEveryAccount(t *testing.T) {
 	}
 
 	// 被中断时上游 message 优先于逐账号明细，且不能落绿。
-	if !strings.Contains(page, `if (result.cancelled) { banner("warn", "一键任务被中断：`) {
+	if !strings.Contains(page, `if (result.cancelled) { banner("warn", t("一键任务被中断：`) {
 		t.Fatal("cancelled 必须先把上游 message 摆出来，并落 warn")
 	}
 	// 局部变量 head 会遮蔽 document.head，按 #75 复审要求改名。

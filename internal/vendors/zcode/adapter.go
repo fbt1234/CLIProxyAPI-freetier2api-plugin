@@ -46,7 +46,13 @@ type adapter struct {
 	activations *activationState
 	// gate 是本实例的 Start Plan 出站闸门；不共享，多 App 并存时互不影响。
 	gate *chatGate
+	// credits 是模型计费倍率表。ZCode 是订阅制套餐，上游不提供数值倍率，
+	// 统一展示「订阅」——比留空「—」更能说明为什么没有倍率。
+	credits core.CreditTable
 }
+
+// creditSubscription 是 ZCode 的计费展示文案：订阅制，无按次倍率。
+const creditSubscription = "订阅"
 
 // Instances 构造 ZCode 国内 / 国际两个实例。
 //
@@ -148,7 +154,23 @@ func (v *adapter) StaticModels(ctx context.Context) ([]pluginapi.ModelInfo, erro
 	if errModels != nil {
 		return nil, errModels
 	}
+	// 订阅制套餐没有按次倍率，但也不能让控制台的「费用倍率」列永远空着：
+	// 每轮探测后整表写成「订阅」，与 cline 的 CostPass 文案保持一致。
+	v.applyModelCredits(models)
 	return modelsToPluginAPI(models), nil
+}
+
+// applyModelCredits 用一轮模型清单整表替换倍率表。
+func (v *adapter) applyModelCredits(models []Model) {
+	core.FillCredits(&v.credits, models,
+		func(model Model) string { return model.ID },
+		func(Model) string { return creditSubscription },
+	)
+}
+
+// ModelCredits 实现 core.CreditsProvider：把本实例的倍率表交给控制台。
+func (v *adapter) ModelCredits() map[string]string {
+	return v.credits.Snapshot()
 }
 func modelsToPluginAPI(models []Model) []pluginapi.ModelInfo {
 	return core.ConvertModels(models, func(model Model) (core.ModelDescriptor, bool) {

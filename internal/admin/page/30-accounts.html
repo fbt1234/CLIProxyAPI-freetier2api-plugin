@@ -58,12 +58,12 @@
       saved: account.alias || "",
       fallback: function () { return accountDisplay(account); },
       prefill: function () { return accountOriginalName(account); },
-      placeholder: "留空使用上游名称",
+      placeholder: t("留空使用上游名称"),
       normalize: function (next) { return next === accountOriginalName(account) ? "" : next; },
       title: function (saved) {
         return saved
-          ? "点击编辑账号别名（留空或与原名称相同则清除）"
-          : "点击设置账号别名（留空或与原名称相同则不设置）";
+          ? t("点击编辑账号别名（留空或与原名称相同则清除）")
+          : t("点击设置账号别名（留空或与原名称相同则不设置）");
       },
       save: function (next) {
         return api("POST", "/accounts/alias", { file_id: account.file_id, alias: next }).then(function (data) {
@@ -119,8 +119,8 @@
     var delBtn = document.getElementById("btnDeleteAccounts");
     if (delBtn) {
       delBtn.disabled = count === 0;
-      if (count === 0) { delBtn.textContent = "删除"; deleteArmed = false; }
-      else if (!deleteArmed) delBtn.textContent = "删除（" + count + "）";
+      if (count === 0) { delBtn.textContent = t("删除"); deleteArmed = false; }
+      else if (!deleteArmed) delBtn.textContent = t("删除（") + count + "）";
     }
   }
 
@@ -145,9 +145,9 @@
   // 后端只给 success / already / error 三种状态。NotRecorded（上游窗口未开启、
   // 领取被拒）也被归为 error：它同样「本次没领到」，不能显示成成功。
   function checkinStatusPill(status) {
-    if (status === "success") return pill("成功", "ok");
-    if (status === "already") return pill("已签到");
-    return pill("失败", "err");
+    if (status === "success") return pill(t("成功"), "ok");
+    if (status === "already") return pill(t("已签到"));
+    return pill(t("失败"), "err");
   }
 
   // buildCheckinHistoryRow 构造可展开的签到历史行（后端已按新→旧排好序）。
@@ -166,7 +166,7 @@
       line.appendChild(el("span", entry.run_at ? new Date(entry.run_at).toLocaleString() : "-"));
       line.appendChild(document.createTextNode("  "));
       line.appendChild(checkinStatusPill(entry.status));
-      line.appendChild(el("span", entry.trigger === "schedule" ? "  定时" : "  手动", "muted"));
+      line.appendChild(el("span", entry.trigger === "schedule" ? t("  定时") : t("  手动"), "muted"));
       if (entry.message) line.appendChild(el("span", "  " + entry.message));
       if (entry.credit) line.appendChild(el("span", "  +" + entry.credit, "muted"));
       cell.appendChild(line);
@@ -207,16 +207,16 @@
     var filter = (document.getElementById("accountFilter").value || "").trim().toLowerCase();
     var visible = accounts.filter(function (account) { return accountMatchesFilter(account, filter); });
     setText("accountCount", accounts.length
-      ? "（" + (filter ? visible.length + " / " + accounts.length : accounts.length) + " 个）"
+      ? "（" + (filter ? visible.length + " / " + accounts.length : accounts.length) + t(" 个）")
       : "");
     if (!accounts.length) {
       syncAccountSelection();
-      host.appendChild(el("div", "没有账号。请在 CPA 面板的「添加认证」里选择 FreeTier 2API，或在控制台页发起登录。", "muted"));
+      host.appendChild(el("div", t("没有账号。请在 CPA 面板的「添加认证」里选择 FreeTier 2API，或在控制台页发起登录。"), "muted"));
       return;
     }
     if (!visible.length) {
       syncAccountSelection();
-      host.appendChild(el("div", "没有匹配「" + filter + "」的账号。", "muted"));
+      host.appendChild(el("div", t("没有匹配「") + filter + t("」的账号。"), "muted"));
       return;
     }
     // 排序：状态 + 供应商名称 + 账号 ID（启用在上，停用在下；同状态内按 供应商名称 + 账号 ID 升序）
@@ -241,7 +241,7 @@
 
     var table = el("table");
     var head = el("tr");
-    ["", "状态", "供应商", "账号", "签到", "剩余 / 总额", "剩余率", "刷新时间"]
+    ["", t("状态"), t("供应商"), t("账号"), t("签到"), t("剩余 / 总额"), t("剩余率"), t("刷新时间")]
       .forEach(function (name) { head.appendChild(el("th", name)); });
     table.appendChild(head);
 
@@ -250,7 +250,7 @@
       // historyRow 是该账号的展开行（无历史或未展开时为 null / hidden）。
       var historyRow = null;
       row.appendChild(accountCheckCell(account));
-      row.appendChild(cellWith(account.disabled ? pill("停用", "err") : pill("启用", "ok")));
+      row.appendChild(cellWith(account.disabled ? pill(language === "en" ? "Disabled" : "停用", "err") : pill(language === "en" ? "Enabled" : "启用", "ok")));
 
       var vendor = vendorLabel(account.vendor_id, account.realm);
       var vendorCell = el("td");
@@ -278,7 +278,7 @@
           supportsCheckin = v ? v.supports_checkin : (account.realm !== "global");
         }
         if (!supportsCheckin) {
-          row.appendChild(el("td", "无签到活动", "muted"));
+          row.appendChild(el("td", t("无签到活动"), "muted"));
         } else {
           // 今日待复核由后端判定并下发布尔值，前端不自己拼。
           //
@@ -291,23 +291,23 @@
           // 只写不清，光看日期串看不出今天到底签没签。
           var confirmedToday = !!account.checkin_today;
           var checkinCell = el("td", pendingToday
-            ? "待复核"
+            ? t("待复核")
             : (checkin.last_date
-              ? (checkin.last_date + (checkin.streak ? " · 连续 " + checkin.streak + " 天" : ""))
-              : "未签到"),
+              ? (checkin.last_date + (checkin.streak ? t(" · 连续 ") + checkin.streak + t(" 天") : ""))
+              : t("未签到")),
             (!pendingToday && checkin.last_date && !confirmedToday) ? "muted" : null);
           // 待复核：上游在北京时间 12 点前会对还没领到的账号回「已签到」，
           // 此时不能显示成「已签到」，否则用户以为今天领过了。
           if (pendingToday) {
             checkinCell.className = "warn";
-            checkinCell.title = "上游称今日已签到，但北京时间 12 点前上游会误报，后续排程会再确认" +
-              (checkin.last_date ? "；上次确认签到：" + checkin.last_date : "");
+            checkinCell.title = t("上游称今日已签到，但北京时间 12 点前上游会误报，后续排程会再确认") +
+              (checkin.last_date ? t("；上次确认签到：") + checkin.last_date : "");
           }
           var history = account.checkin_history || [];
           if (history.length) {
-            var historyBtn = el("button", "历史 " + history.length, "act");
+            var historyBtn = el("button", t("历史 ") + history.length, "act");
             historyBtn.type = "button";
-            historyBtn.title = "展开该账号最近 " + history.length + " 次签到";
+            historyBtn.title = t("展开该账号最近 ") + history.length + t(" 次签到");
             historyBtn.style.marginLeft = "8px";
             historyRow = buildCheckinHistoryRow(history);
             historyBtn.addEventListener("click", (function (target) {
@@ -328,7 +328,7 @@
         if (account.supports_quota) {
           // 首次进入或刚添加的短暂状态：进入页面会自动查一次，添加与手动
           // 刷新也会重查。
-          var cell = el("td", "查询中…", "muted");
+          var cell = el("td", t("查询中…"), "muted");
           cell.colSpan = 2;
           row.appendChild(cell);
         } else {
@@ -339,7 +339,7 @@
         // 失败原因必须看得见：只渲染「--」时用户分不清是凭证失效、上游抖动
         // 还是本来就查不到，也就不知道该重新授权还是稍后再查。后端已经把
         // 原因写进缓存的 message，这里只负责展示。
-        var reason = quota.message || "额度查询失败";
+        var reason = quota.message || t("额度查询失败");
         var remainCell = el("td", "-- / --", "muted");
         remainCell.title = reason;
         row.appendChild(remainCell);
@@ -347,7 +347,7 @@
         reasonCell.title = reason;
         row.appendChild(reasonCell);
       } else if (quota.unlimited) {
-        row.appendChild(el("td", "无限"));
+        row.appendChild(el("td", t("无限")));
         row.appendChild(el("td", "—", "muted"));
       } else {
         // has_total 由后端按「上游是否真的报了总额」给出，前端不靠 total>0 反推：
@@ -357,26 +357,26 @@
         var hasTotal = !!quota.has_total;
         var remainCell = el("td", quota.remain + " / " + (hasTotal ? quota.total : "—"));
         if (!hasTotal) {
-          remainCell.title = "上游只提供可用余额，没有总额 / 已用概念";
+          remainCell.title = t("上游只提供可用余额，没有总额 / 已用概念");
         } else if (!(quota.total > 0)) {
-          remainCell.title = "上游报了总额但它是 0，算不出剩余比例";
+          remainCell.title = t("上游报了总额但它是 0，算不出剩余比例");
         }
         // 本次刷新失败、显示的是上次成功读数：必须标出来，否则旧数字会被
         // 当成实时值。上游限流/超时是常态，清空额度列反而让人分不清
         // 「没额度了」和「这次没取到」。
         if (quota.stale) {
-          remainCell.appendChild(el("span", " 非实时", "muted"));
-          remainCell.title = "本次刷新失败，显示上次读数" +
-            (quota.fetched_at ? "（取于 " + quota.fetched_at.slice(0, 19).replace("T", " ") + "）" : "") +
-            "：" + (quota.stale_reason || "原因未知");
+          remainCell.appendChild(el("span", t(" 非实时"), "muted"));
+          remainCell.title = t("本次刷新失败，显示上次读数") +
+            (quota.fetched_at ? t("（取于 ") + quota.fetched_at.slice(0, 19).replace("T", " ") + "）" : "") +
+            "：" + (quota.stale_reason || t("原因未知"));
         }
         row.appendChild(remainCell);
         // 待生效的活动授予跟在「剩余 / 总额」后面：它已经领到但还没进桶，
         // 既不能算进上面两个数（会让人以为现在就能用），也不能不显示。
         var pending = pendingQuota(quota);
         if (pending > 0) {
-          var pendingTag = el("span", " 待生效 " + pending, "muted");
-          pendingTag.title = "已领取的活动额度，生效后并入上面的剩余 / 总额";
+          var pendingTag = el("span", t(" 待生效 ") + pending, "muted");
+          pendingTag.title = t("已领取的活动额度，生效后并入上面的剩余 / 总额");
           remainCell.appendChild(pendingTag);
         }
         // 分母守卫：has_total 只说明上游报了总额键，不保证它大于 0。
@@ -414,8 +414,8 @@
     });
     host.appendChild(table);
 
-    var summary = el("div", "共 " + accounts.length + (filter ? " 个账号（显示 " + visible.length + " 个）" : " 个账号")
-      + " · 插件版本 " + (status.version || "-"), "hint");
+    var summary = el("div", t("共 ") + accounts.length + (filter ? t(" 个账号（显示 ") + visible.length + t(" 个）") : t(" 个账号"))
+      + t(" · 插件版本 ") + (status.version || "-"), "hint");
     host.appendChild(summary);
 
     syncAccountSelection();
@@ -437,12 +437,12 @@
       document.getElementById("setRaccoonDailyGrant").checked = !!settings.auto_raccoon_daily_grant;
       var scheduler = status.scheduler || {};
       var labels = {};
-      (settings.task_specs || []).forEach(function (spec) { labels[spec.kind] = spec.label || spec.kind; });
+      (settings.task_specs || []).forEach(function (spec) { labels[spec.kind] = t(spec.label || spec.kind); });
       var nextTasks = (scheduler.next_tasks || []).map(function (kind) { return labels[kind] || kind; });
       // 后端给的是已经排好的可读时刻（HH:MM，跨天补日期），页面不再拼 RFC3339。
       document.getElementById("scheduleInfo").textContent =
-        "下次执行：" + (scheduler.next_hhmm || scheduler.next_at || "-") +
-        (nextTasks.length ? " · 任务：" + nextTasks.join("、") : "");
+        t("下次执行：") + (scheduler.next_hhmm || scheduler.next_at || "-") +
+        (nextTasks.length ? t(" · 任务：") + nextTasks.join("、") : "");
       // 自愈：上次变更后重载没跑成功（页面被关掉、宿主当时不可用），这里补一次。
       // 重载成功后插件会清除该标记；每次页面生命周期只补一次，避免宿主不支持
       // 自动重载时反复写配置。
@@ -472,8 +472,8 @@
     if (!ids.length) return;
     if (!deleteArmed) {
       deleteArmed = true;
-      banner("warn", "再次点击「删除」确认删除选中的 " + ids.length + " 个账号（不可恢复）");
-      btn.textContent = "确认删除";
+      banner("warn", t("再次点击「删除」确认删除选中的 ") + ids.length + t(" 个账号（不可恢复）"));
+      btn.textContent = t("确认删除");
       setTimeout(function () {
         deleteArmed = false;
         syncAccountSelection();
@@ -489,8 +489,8 @@
         var failed = results.filter(function (r) { return !r.ok; });
         banner(failed.length ? "warn" : "ok",
           failed.length
-            ? "已删除 " + (results.length - failed.length) + " 个账号，" + failed.length + " 个失败：" + failed[0].message
-            : (data.error || ("已删除 " + (data.deleted || ids.length) + " 个账号")), 8000);
+            ? t("已删除 ") + (results.length - failed.length) + t(" 个账号，") + failed.length + t(" 个失败：") + failed[0].message
+            : (data.error || (t("已删除 ") + (data.deleted || ids.length) + t(" 个账号"))), 8000);
         // 成功的从选中集合移除；失败的保留勾选，便于重试。
         results.forEach(function (r) { if (r.ok) delete selectedAccounts[r.auth_id]; });
         // 删除后立即重新拉状态，让已删账号从列表消失。
@@ -506,13 +506,13 @@
   // 都保留，随时可以再启用——与删除是两件事。
   function toggleSelectedAccounts(disabled) {
     var ids = selectedAccountIDs();
-    if (!ids.length) { banner("err", "请先勾选账号"); return; }
-    var verb = disabled ? "停用" : "启用";
+    if (!ids.length) { banner("err", t("请先勾选账号")); return; }
+    var verb = disabled ? t("停用") : t("启用");
     api("POST", "/accounts/enabled", { account_ids: ids, enabled: !disabled }).then(function (data) {
       if (!data) return;
       var failed = (data.results || []).filter(function (r) { return !r.ok; });
       banner(failed.length ? "warn" : "ok",
-        failed.length ? verb + "失败：" + failed[0].message : "已" + verb + " " + (data.changed || 0) + " 个账号", 8000);
+        failed.length ? verb + t("失败：") + failed[0].message : t("已") + verb + " " + (data.changed || 0) + t(" 个账号"), 8000);
       loadStatus(true).catch(function () { });
     }).catch(function (err) { banner("err", err.message); });
   }

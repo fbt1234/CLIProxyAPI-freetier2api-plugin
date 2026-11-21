@@ -4,31 +4,31 @@
   // 「表头藏了、单元格还在」的错位。optional 的列默认隐藏，可按浏览器打开。
   var MODEL_COLUMNS = [
     { key: "check", header: "", cell: modelCheckCell },
-    { key: "status", header: "状态", cell: modelStatusCell },
-    { key: "vendor", header: "供应商", cell: modelVendorCell },
-    { key: "model", header: "模型 ID", cell: modelIDCell },
-    { key: "name", header: "名称", cell: function (m) {
+    { key: "status", header: t("状态"), cell: modelStatusCell },
+    { key: "vendor", header: t("供应商"), cell: modelVendorCell },
+    { key: "model", header: t("模型 ID"), cell: modelIDCell },
+    { key: "name", header: t("名称"), cell: function (m) {
       var td = el("td");
       var span = el("span", m.name || "—", "name-text");
       if (m.name) span.title = m.name;
       td.appendChild(span);
       return td;
     } },
-    { key: "credits", header: "费用倍率", cell: modelCreditsCell },
-    { key: "context", header: "上下文", cell: function (m) {
+    { key: "credits", header: t("费用倍率"), cell: modelCreditsCell },
+    { key: "context", header: t("上下文"), cell: function (m) {
       return el("td", m.context_length ? formatTokens(m.context_length) : "—");
     } },
-    { key: "output", header: "输出上限", optional: true, defaultShow: false, cell: function (m) {
+    { key: "output", header: t("输出上限"), optional: true, defaultShow: false, cell: function (m) {
       return el("td", m.max_output_tokens ? formatTokens(m.max_output_tokens) : "—");
     } },
-    { key: "efforts", header: "推理档位", optional: true, defaultShow: false, cell: function (m) {
+    { key: "efforts", header: t("推理档位"), optional: true, defaultShow: false, cell: function (m) {
       var levels = (m.efforts || []).join(" / ");
       return el("td", levels || "—", levels ? "" : "muted");
     } },
-    { key: "caps", header: "能力", optional: true, defaultShow: true, cell: function (m) {
+    { key: "caps", header: t("能力"), optional: true, defaultShow: true, cell: function (m) {
       var caps = [];
-      if (m.supports_images) caps.push("图片");
-      if (m.supports_tools) caps.push("工具");
+      if (m.supports_images) caps.push(t("图片"));
+      if (m.supports_tools) caps.push(t("工具"));
       return el("td", caps.join(" · ") || "—", caps.length ? "" : "muted");
     } }
   ];
@@ -142,8 +142,8 @@
     // 没有模型时只留一行提示，不要渲染一张全是 "—" 的空表。
     if (!list.length) {
       host.appendChild(el("div", allModels.length
-        ? "没有匹配「" + filter + "」的模型。"
-        : "暂无模型清单，正在从上游获取…", "muted"));
+        ? t("没有匹配「") + filter + t("」的模型。")
+        : t("暂无模型清单，正在从上游获取…"), "muted"));
       return;
     }
     var columns = visibleColumns();
@@ -154,7 +154,7 @@
       var th = el("th", null, "col-" + col.key);
       if (col.key === "credits") {
         th.className += " sortable";
-        th.title = "点击按费用倍率排序（从低到高 / 从高到低 / 恢复默认）";
+        th.title = t("点击按费用倍率排序（从低到高 / 从高到低 / 恢复默认）");
         var wrap = el("span", null, "th-sort-wrap");
         wrap.appendChild(el("span", headerText));
         var arrows = el("span", null, "sort-arrows" + (creditsSortOrder ? " order-" + creditsSortOrder : ""));
@@ -201,7 +201,7 @@
   }
 
   function modelStatusCell(model) {
-    return cellWith(model.disabled ? pill("停用", "err") : pill("启用", "ok"));
+    return cellWith(model.disabled ? pill(language === "en" ? "Disabled" : "停用", "err") : pill(language === "en" ? "Enabled" : "启用", "ok"));
   }
 
   function modelVendorCell(model) {
@@ -226,8 +226,8 @@
   function modelCreditsCell(model) {
     var credits = formatCredits(model.credits);
     if (!credits) return el("td", "—", "muted");
-    var cell = el("td", credits, "mono");
-    cell.title = "上游计费倍率：" + credits;
+    var cell = el("td", t(credits), "mono");
+    cell.title = t("上游计费倍率：") + t(credits);
     return cell;
   }
 
@@ -251,8 +251,8 @@
       mono: true,
       title: function (saved) {
         return saved
-          ? "点击编辑对外模型 ID（留空恢复官方 ID：" + bareID + "）"
-          : "点击编辑对外模型 ID（留空即用官方 ID：" + bareID + "）";
+          ? t("点击编辑对外模型 ID（留空恢复官方 ID：") + bareID + "）"
+          : t("点击编辑对外模型 ID（留空即用官方 ID：") + bareID + "）";
       },
       save: function (next) {
         return api("POST", "/models/alias", { model: key, alias: next }).then(function (data) {
@@ -281,11 +281,11 @@
   // 触发的宿主配置重载来更新。
   function toggleModels(disabled) {
     var ids = selectedModelIDs();
-    if (!ids.length) { banner("err", "请先勾选模型"); return; }
-    var verb = disabled ? "停用" : "启用";
+    if (!ids.length) { banner("err", t("请先勾选模型")); return; }
+    var verb = disabled ? t("停用") : t("启用");
     api("POST", "/models/toggle", { models: ids, disabled: disabled }).then(function (data) {
       if (!data) return;
-      banner("ok", "已" + verb + " " + (data.changed || ids.length) + " 个模型，正在同步到宿主…");
+      banner("ok", t("已") + verb + " " + (data.changed || ids.length) + t(" 个模型，正在同步到宿主…"));
       syncModelConfig();
       loadModels(false);
     }).catch(function (err) { banner("err", err.message); });
@@ -330,8 +330,8 @@
       loadModels(false);
     }).catch(function (err) {
       // 失败必须让用户知道：调用拦截已生效，但 /v1/models 的增删还没同步。
-      banner("err", "模型列表同步失败：" + err.message
-        + "（可再操作一次重试；宿主版本过老时需手动重启一次）");
+      banner("err", t("模型列表同步失败：") + err.message
+        + t("（可再操作一次重试；宿主版本过老时需手动重启一次）"));
     }).then(function () {
       modelSyncRunning = false;
       if (modelSyncPending) { modelSyncPending = false; syncModelConfig(); }
@@ -385,16 +385,16 @@
     if (btn) btn.disabled = true;
     modelsLoaded = true;        // 已手动刷新，不再触发首屏自动刷新
     modelsPollLeft = 2;
-    if (!quiet) banner("ok", "正在从上游拉取模型清单…", 0);
+    if (!quiet) banner("ok", t("正在从上游拉取模型清单…"), 0);
     api("POST", "/models/refresh", {}).then(function (data) {
       var count = (data && data.models) || 0;
       if (!quiet) {
         banner(count ? "ok" : "warn",
-          count ? ("已从上游拉取 " + count + " 个模型") : "上游返回 0 个模型，请查看运行日志", 6000);
+          count ? (t("已从上游拉取 ") + count + t(" 个模型")) : t("上游返回 0 个模型，请查看运行日志"), 6000);
       }
       return loadModels(false);
     }).catch(function (err) {
-      if (!quiet) banner("err", "从上游刷新失败：" + err.message, 10000);
+      if (!quiet) banner("err", t("从上游刷新失败：") + err.message, 10000);
     }).then(function () { if (btn) btn.disabled = false; });
   }
 

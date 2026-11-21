@@ -36,7 +36,7 @@ func TestConsolePageGuardsZeroTotalDivisor(t *testing.T) {
 		t.Fatal("未加分母守卫的 ratio 写法必须删除")
 	}
 	// 总额为 0 时要给出悬浮说明，别让人以为额度真的用光了。
-	if !strings.Contains(page, `remainCell.title = "上游报了总额但它是 0，算不出剩余比例"`) {
+	if !strings.Contains(page, `remainCell.title = t("上游报了总额但它是 0，算不出剩余比例")`) {
 		t.Fatal("total=0 时剩余列需要悬浮说明")
 	}
 }

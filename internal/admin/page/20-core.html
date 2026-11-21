@@ -1,6 +1,49 @@
 <script>
 (function () {
   "use strict";
+  var language = "zh-CN";
+  try { if (localStorage.getItem("freetier-console-language") === "en") language = "en"; } catch (e) {}
+  var translations = {
+    "WorkBuddy / Qoder 账号、额度、模型与任务管理 · 本地零凭证存储": "WorkBuddy / Qoder accounts, quotas, models and tasks · No local credential storage",
+    "管理密钥": "Management key", "填入 CPA 管理密钥（remote-management.secret-key）": "Enter CPA management key (remote-management.secret-key)",
+    "使用": "Use", "本页直接复用 CPA 管理面板已登录的密钥（面板需勾选「记住密码」）；读不到时在此填入一次即可。": "This page reuses the CPA panel's saved management key when Remember password is enabled. Otherwise, enter it here.",
+    "账号概览": "Accounts", "添加账号 ▾": "Add account ▾", "停用选中": "Disable selected", "启用选中": "Enable selected", "全选": "Select all", "清空": "Clear selection", "Token续期": "Renew tokens", "查询额度": "Check quotas", "一键签到": "Check in", "一键任务": "Run tasks", "删除": "Delete", "筛选": "Filter", "如 workbuddy / 邮箱": "e.g. workbuddy / email",
+    "手机验证码登录": "Sign in by SMS", "手机号（11 位）": "Phone number (11 digits)", "发送验证码": "Send code", "6 位短信验证码": "6-digit SMS code", "备注名称（可选）": "Label (optional)", "登录并添加": "Sign in and add", "取消": "Cancel", "输入手机号获取验证码。": "Enter a phone number to receive a code.",
+    "完成授权": "Complete authorization", "打开链接": "Open link", "复制": "Copy", "等待授权…": "Waiting for authorization…", "回调没到插件？粘贴回调链接": "Callback didn't reach the plugin? Paste the callback URL", "把浏览器地址栏里的整条 localhost 链接粘贴到这里": "Paste the complete localhost URL from the browser address bar", "提交回调链接": "Submit callback URL", "打开华为云登录页": "Open Huawei Cloud login",
+    "添加 API Key 账号": "Add API key account", "输入 API Key（必填）": "Enter API key (required)", "保存账号": "Save account", "请输入从官网获取的 API Key，保存后自动在 auth 目录创建凭证。": "Enter an API key from the provider. Saving creates credentials in the auth directory.",
+    "套餐领取": "Claim plans", "正在查询可领套餐…": "Checking available plans…", "验证码脚本加载失败？改用粘贴验证码参数": "Captcha failed to load? Paste the verification parameter instead", "粘贴 captchaVerifyParam": "Paste captchaVerifyParam", "确认领取": "Confirm claim",
+    "模型": "Models", "读取模型清单": "Load models", "如 glm / gpt": "e.g. glm / gpt", "选择要在表格中展示的列": "Choose table columns", "列展示 ▾": "Columns ▾", "点击「模型 ID」列的模型名或其右侧 ✎ 即可编辑别名（留空=恢复官方 ID）。": "Click a model ID or its ✎ to edit its alias (leave blank to restore the official ID).", "不同供应商的模型设成同一别名": "Give models from different providers the same alias", "，宿主会当成一个 ID 自动调度。": ", and the host will route them as one ID.",
+    "运行期设置": "Runtime settings", "每日自动签到": "Daily automatic check-in", "开关只影响签到后自动执行的后续任务：开学季、连登奖励。其它成长任务不随签到自动跑。": "Only controls follow-up tasks after check-in: back-to-school and consecutive login rewards. Other growth tasks are not run automatically.", "签到后自动跑后续任务（开学季 / 连登奖励）": "Run follow-up tasks after check-in (back-to-school / consecutive login rewards)", "调用网页端 setting_info 触发服务器发放当日每日积分（幂等，已发不重复）。": "Calls setting_info to trigger today's daily credits; already issued credits are not duplicated.", "小浣熊每日积分": "Raccoon daily credits", "保存设置": "Save settings",
+    "面板存储格式版本不受支持，请升级本插件：enc::v": "Unsupported panel storage version; update this plugin: enc::v", "关闭提示": "Dismiss message", "管理密钥无效或缺失（HTTP ": "Invalid or missing management key (HTTP ", "）。已停止全部自动请求，避免触发 CPA 的 IP 封禁。": "). Automatic requests stopped to avoid a CPA IP ban. ", "若面板勾选了「记住密码」，本页会自动复用；未勾选请在上方填入一次。": "Enable Remember password in the panel or enter the key above.", "接口返回的不是 JSON（HTTP ": "API returned non-JSON (HTTP ", "接口没有返回内容（HTTP ": "API returned no content (HTTP ", "）：该管理路由可能未在插件里注册": "): the management route may not be registered", "请求超时（": "Request timed out (", " 秒）：": " seconds): ", "没有可用的供应商，请检查插件配置的 enabled_realms。": "No providers available; check enabled_realms in the plugin configuration.",
+    "留空使用上游名称": "Leave blank to use the provider name", "点击编辑账号别名（留空或与原名称相同则清除）": "Click to edit the account alias (blank or original name clears it)", "点击设置账号别名（留空或与原名称相同则不设置）": "Click to set an account alias (blank or original name leaves it unset)", "删除（": "Delete (", "成功": "Success", "已签到": "Checked in", "失败": "Failed", "  定时": "  Scheduled", "  手动": "  Manual", " 个）": ")", "没有账号。请在 CPA 面板的「添加认证」里选择 FreeTier 2API，或在控制台页发起登录。": "No accounts. Add a FreeTier 2API authentication in the CPA panel or sign in here.", "没有匹配「": "No results matching ‘", "」的账号。": "’.",
+    "免费": "Free", "订阅": "Subscription", "每日签到": "Daily check-in", "状态": "Status", "供应商": "Provider", "账号": "Account", "签到": "Check-in", "剩余 / 总额": "Remaining / total", "剩余率": "Remaining %", "刷新时间": "Updated", "停用": "Disable", "启用": "Enable", "无签到活动": "No check-in", "待复核": "Pending verification", " · 连续 ": " · Streak: ", " 天": " days", "未签到": "Not checked in", "上游称今日已签到，但北京时间 12 点前上游会误报，后续排程会再确认": "The provider reports a check-in today, but may be inaccurate before noon Beijing time. The next scheduled run will recheck.", "；上次确认签到：": "; last confirmed check-in: ", "历史 ": "History ", "展开该账号最近 ": "Show the last ", " 次签到": " check-ins for this account", "查询中…": "Loading…", "额度查询失败": "Quota lookup failed", "无限": "Unlimited", "上游只提供可用余额，没有总额 / 已用概念": "The provider reports only the available balance, not total or used amounts", "上游报了总额但它是 0，算不出剩余比例": "The provider reports a zero total; remaining percentage cannot be calculated", " 非实时": " Cached", "本次刷新失败，显示上次读数": "Refresh failed; showing the previous reading", "（取于 ": " (from ", "原因未知": "Unknown reason", " 待生效 ": " Pending ", "已领取的活动额度，生效后并入上面的剩余 / 总额": "Claimed promotional quota will be included in the totals when it becomes active",
+    "共 ": "Total: ", " 个账号（显示 ": " accounts (showing ", " 个账号": " accounts", " · 插件版本 ": " · Plugin version ", "下次执行：": "Next run: ", " · 任务：": " · Tasks: ", "再次点击「删除」确认删除选中的 ": "Click Delete again to confirm deletion of ", " 个账号（不可恢复）": " selected accounts (cannot be undone)", "确认删除": "Confirm deletion", "已删除 ": "Deleted ", " 个账号，": " accounts, ", " 个失败：": " failed: ", "请先勾选账号": "Select accounts first", "失败：": " failed: ", "已": "",
+    "正在查询账号额度…": "Checking account quotas…", "额度查询完成：": "Quota check complete: ", "未知账号": "Unknown account", "未知供应商": "Unknown provider", "未知错误": "Unknown error", "…等 ": "… ", " 个账号失败": " accounts failed", " 个失败\n": " failed\n", "查询失败·重试": "Check failed · Retry", " 个套餐可领": " plans available", "点击查询可领套餐": "Click to check available plans", "已领取": "Claimed", "已领取当前全部套餐": "All current plans claimed", "套餐领取 · ": "Claim plans · ", "查询失败": "Lookup failed", "已领取当前全部套餐，暂无新的可领活动。": "All current plans claimed; no new offers are available.", "查询套餐失败": "Failed to check plans", "上游未下发人机验证参数，无法在页面内完成领取": "The provider did not return captcha parameters; the claim cannot be completed here", "✓ 人机验证已通过，请点击确认领取。": "✓ Verification passed. Click Confirm claim.", "未通过无感验证，请按提示完成滑块。": "Automatic verification failed; complete the slider challenge.", "人机验证出错，请重试。": "Verification failed; please retry.", "请完成人机验证（多数情况下无感通过）。": "Complete the verification (usually automatic).", "，可展开下方粘贴验证码参数。": "; expand below to paste the verification parameter.", "验证码组件加载异常，请重试": "Captcha component failed to load; retry", "验证码脚本加载失败": "Captcha script failed to load", "请先完成人机验证": "Complete verification first", "领取中…": "Claiming…", "领取成功": "Claim successful", "领取失败": "Claim failed",
+    "模型 ID": "Model ID", "名称": "Name", "费用倍率": "Cost multiplier", "上下文": "Context", "输出上限": "Max output", "推理档位": "Reasoning levels", "能力": "Capabilities", "图片": "Images", "工具": "Tools", "」的模型。": "’.", "暂无模型清单，正在从上游获取…": "No model list yet; fetching from the provider…", "点击按费用倍率排序（从低到高 / 从高到低 / 恢复默认）": "Sort by cost multiplier (ascending / descending / default)", "上游计费倍率：": "Provider cost multiplier: ", "点击编辑对外模型 ID（留空恢复官方 ID：": "Edit public model ID (blank restores official ID: ", "点击编辑对外模型 ID（留空即用官方 ID：": "Edit public model ID (blank uses official ID: ", "请先勾选模型": "Select models first", " 个模型，正在同步到宿主…": " models; syncing to host…", "模型列表同步失败：": "Failed to sync models: ", "（可再操作一次重试；宿主版本过老时需手动重启一次）": " (retry the operation; older hosts may require a restart)", "正在从上游拉取模型清单…": "Fetching models from the provider…", "已从上游拉取 ": "Fetched ", " 个模型": " models", "上游返回 0 个模型，请查看运行日志": "The provider returned 0 models; check the logs", "从上游刷新失败：": "Provider refresh failed: ",
+    "密钥刚验证失败，请稍候几秒再试（CPA 按 IP 统计失败次数，不能连续重试）。": "Key verification just failed. Wait a few seconds before retrying; CPA counts failures by IP.", "请先填入管理密钥": "Enter the management key first", "管理密钥只能包含可见 ASCII 字符": "The management key must contain only visible ASCII characters", "正在验证密钥…": "Verifying key…", "密钥无效，请重新输入（面板勾选「记住密码」可免输）": "Invalid key; enter it again (or enable Remember password in the panel)", "密钥验证失败：请求未能通过 CPA 鉴权。": "Key verification failed: CPA rejected the request.", "已使用手动填入的密钥": "Using the manually entered key", "添加 ": "Add ", " 账号": " account", "请输入从官网申请的 API Key，保存后插件将自动在 auth 目录创建凭证文件。": "Enter an API key from the provider. Saving creates a credential file in the auth directory.", "粘贴 ": "Paste ", " 凭证": " credentials", "粘贴 AutoClaw 国际版凭证 JSON（含访问令牌与刷新令牌，可从 AutoClaw 桌面端登录态文件或 Agent2API 获取）。": "Paste AutoClaw Global credential JSON (access and refresh tokens from the desktop session file or Agent2API). ", "保存后插件会自动续期。": "The plugin renews it automatically after saving.",
+    " 账号（网页登录）": " account (web login)", "先选择登录方式；点按钮后会弹出阿里云人机验证（官方要求的风控步骤）。": "Choose a login method. Alibaba Cloud verification will appear when you click the button.", "使用 ": "Sign in with ", " 登录": "", "粘贴凭证": "Paste credentials", "正在准备人机验证…": "Preparing verification…", "获取风控验证配置失败": "Failed to get verification configuration", "上游没有开启网页登录，请改用「粘贴凭证」": "Web login is not enabled by the provider; use Paste credentials", "上游返回的风控配置不完整，请稍后重试": "The provider returned incomplete verification configuration; retry later", "请在弹出的滑块中完成验证（官方要求的风控步骤）。": "Complete the slider verification in the popup.", "登录失败：": "Login failed: ", "人机验证通过，正在获取授权链接…": "Verification passed; fetching authorization link…", "获取授权链接失败": "Failed to get authorization link", "上游没有返回授权链接，请重试": "The provider did not return an authorization link; retry", "登录完成后浏览器会停在 ": "After login the browser will stop at ", "http://localhost/ 的回调地址": "the http://localhost/ callback address", "。远程 / Docker 部署下这个地址打不开是正常的，把地址栏里的整条链接复制后粘贴到下面提交。": ". For remote / Docker deployments this address may not open; copy the full URL from the address bar and submit it below.", "请打开下面的链接完成 ": "Open the link below to complete ", " 登录。": " login.", "获取授权链接失败：": "Failed to get authorization link: ", "验证码组件初始化超时，请重试": "Captcha initialization timed out; retry", "验证码组件不可用，请重试": "Captcha is unavailable; retry", "验证码等待超时，请重新点击登录再试一次": "Captcha timed out; click login to retry", " 账号（手机验证码登录）": " account (SMS login)", "正在获取授权链接…": "Getting authorization link…", "上游只认本机回调地址 ": "The provider requires the local callback address ", "。与插件同一台机器时直接点「打开链接」即可；远程 / Docker 部署时浏览器会停在该地址上，": ". On the plugin host, click Open link. For remote / Docker deployments the browser will stop at that address; ", "把地址栏里的整条链接复制后粘贴到下面提交。": "copy the full URL from the address bar and submit it below.", "响应缺少 url": "Response missing URL", "请打开下面的链接完成授权，页面会自动检测结果。": "Open the link below to authorize; this page will detect the result.", "授权超时，请重新发起登录。": "Authorization timed out; start login again.", "授权成功，账号已写入 CPA。": "Authorization succeeded; the account was saved to CPA.", "账号添加成功，正在查询该账号额度…": "Account added; checking its quota…", "授权失败：": "Authorization failed: ", "未知原因": "Unknown reason", "等待授权中…（已等待 ": "Waiting for authorization… (elapsed ", " 秒）": " seconds)", "轮询失败：": "Polling failed: ", "链接已复制。": "Link copied.", "复制失败，请手动选中复制。": "Copy failed; select and copy the link manually.", "登录会话已结束，请重新发起登录后再粘贴。": "Login session ended; start login again before pasting.", "请先粘贴浏览器地址栏里的整条链接。": "Paste the full URL from the browser address bar first.", "提交中…": "Submitting…", "解析成功，正在写入账号…": "Callback parsed; saving account…", "回调链接暂时无法完成登录，请重新发起登录后重试。": "The callback could not complete login; start login again and retry.", "提交失败：": "Submission failed: ", "请先重新打开添加面板。": "Reopen the add account panel first.", "请先填写手机号。": "Enter a phone number first.", "发送中…": "Sending…", "正在发送验证码…": "Sending verification code…", "验证码已发送。": "Verification code sent.", "发送失败，请稍后重试。": "Sending failed; retry later.", "发送失败：": "Sending failed: ", "请填写手机号与短信验证码。": "Enter the phone number and SMS code.", "登录中…": "Signing in…", "正在验证并添加账号…": "Verifying and adding account…", "账号添加成功": "Account added", "登录失败，请检查验证码后重试。": "Login failed; check the code and retry.", "API Key 不能为空": "API key is required", "保存中…": "Saving…", "保存失败": "Save failed",
+    "正在发起 ": "Starting token renewal for ", "全账号": "all accounts", " 的 Token 续期刷新，请稍候…": "; please wait…", "Token 续期失败：": "Token renewal failed: ", "上游拒绝": "Provider rejected the request", "Token 续期部分成功：": "Token renewal partially succeeded: ", " 成功，": " succeeded, ", " 失败": " failed", "全账号 Token 续期成功": "Token renewal succeeded for all accounts", "Token 续期请求失败：": "Token renewal request failed: ",
+    "必显列，不可取消勾选": "Required column; cannot be hidden", "签到 / 福利领取已在后台开始，请稍候…": "Check-in / benefit claim started in the background…", "当前没有需要签到的账号": "No accounts need check-in", "已完成": "Completed", "另 ": "Another ", " 条结果请查看签到历史": " results are available in check-in history", "签到 / 福利领取完成：": "Check-in / benefit claim complete: ", " 成功": " succeeded", " 个未完成": " incomplete", " 个失败": " failed", "签到失败：": "Check-in failed: ", "一键任务已提交（": "Tasks submitted (", "全部渠道的全部账号": "all accounts across all providers", "），正在执行…": "); running…", "一键任务启动失败：": "Failed to start tasks: ", "一键任务进行中：": "Tasks running: ", " 个账号已处理…": " accounts processed…", "读取一键任务进度失败：": "Failed to read task progress: ", "一键任务已结束，但没有返回结果": "Tasks finished without a result", "一键任务被中断：": "Tasks interrupted: ", "未完成": "Incomplete", "没有可执行的账号": "No eligible accounts", "未执行": "Skipped", "（另 ": " (another ", " 项失败）": " failed)", "当前没有可领取的内容": "Nothing available to claim", " 个账号：成功 ": " accounts: succeeded ", " · 未执行 ": " · skipped ", " · 失败 ": " · failed ", "；另 ": "; another ", " 个见账号列表": " in the account list", "设置已保存并生效": "Settings saved and applied", "正在验证手动填入的密钥…": "Verifying the manually entered key…", "已自动复用 CPA 管理面板的密钥": "Using the saved CPA panel key", "未检测到面板保存的管理密钥": "No saved panel management key found", "未检测到可用的管理密钥：可在面板退出后用「记住密码」重新登录一次，或在此填入": "No usable management key found. Sign in to the panel with Remember password or enter it here."
+  };
+  function t(text) { return language === "en" && Object.prototype.hasOwnProperty.call(translations, text) ? translations[text] : text; }
+  var languageSelect = document.getElementById("language");
+  languageSelect.value = language;
+  languageSelect.addEventListener("change", function () {
+    try { localStorage.setItem("freetier-console-language", this.value); } catch (e) { this.value = language; return; }
+    location.reload();
+  });
+  if (language === "en") {
+    document.documentElement.lang = "en";
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      var node = walker.currentNode;
+      if (node.parentElement.tagName === "SCRIPT" || node.parentElement.closest("#language")) continue;
+      node.nodeValue = node.nodeValue.replace(/\S(?:[\s\S]*\S)?/, function (text) { return t(text); });
+    }
+    document.querySelectorAll("[placeholder], [title]").forEach(function (node) {
+      ["placeholder", "title"].forEach(function (attr) { if (node.hasAttribute(attr)) node.setAttribute(attr, t(node.getAttribute(attr))); });
+    });
+  }
   var BASE = "__BASE__";
   // MGMT 是**本插件**的管理接口前缀。
   var MGMT = "/v0/management" + BASE;
@@ -78,7 +121,7 @@
     if (!match) return [];
     var version = match[1];
     if (version !== "1" && version !== "2") {
-      try { console.warn("面板存储格式版本不受支持，请升级本插件：enc::v" + version + "::"); } catch (e) { /* 忽略 */ }
+      try { console.warn(t("面板存储格式版本不受支持，请升级本插件：enc::v") + version + "::"); } catch (e) { /* 忽略 */ }
       return [];
     }
     var payload = raw.slice(match[0].length);
@@ -167,8 +210,8 @@
       var close = document.createElement("button");
       close.type = "button";
       close.className = "banner-close";
-      close.setAttribute("aria-label", "关闭提示");
-      close.title = "关闭提示";
+      close.setAttribute("aria-label", t("关闭提示"));
+      close.title = t("关闭提示");
       close.textContent = "×";
       close.addEventListener("click", clearBanner);
       el.appendChild(close);
@@ -196,9 +239,9 @@
     authReady = false;
     stopLoginPolling();
     revealKeyInput();
-    setKeyStatus("管理密钥无效或缺失（HTTP " + status + "）");
-    banner("err", "管理密钥无效或缺失（HTTP " + status + "）。已停止全部自动请求，避免触发 CPA 的 IP 封禁。"
-      + "若面板勾选了「记住密码」，本页会自动复用；未勾选请在上方填入一次。");
+    setKeyStatus(t("管理密钥无效或缺失（HTTP ") + status + "）");
+    banner("err", t("管理密钥无效或缺失（HTTP ") + status + t("）。已停止全部自动请求，避免触发 CPA 的 IP 封禁。")
+      + t("若面板勾选了「记住密码」，本页会自动复用；未勾选请在上方填入一次。"));
     return true;
   }
 
@@ -266,7 +309,7 @@
           try {
             data = JSON.parse(raw);
           } catch (parseErr) {
-            var bad = new Error("接口返回的不是 JSON（HTTP " + resp.status + "）");
+            var bad = new Error(t("接口返回的不是 JSON（HTTP ") + resp.status + "）");
             bad.status = resp.status;
             throw bad;
           }
@@ -279,7 +322,7 @@
           throw failure;
         }
         if (data === null) {
-          var empty = new Error("接口没有返回内容（HTTP " + resp.status + "）：该管理路由可能未在插件里注册");
+          var empty = new Error(t("接口没有返回内容（HTTP ") + resp.status + t("）：该管理路由可能未在插件里注册"));
           empty.status = resp.status;
           throw empty;
         }
@@ -297,7 +340,7 @@
     }, function (err) {
       if (timer) { clearTimeout(timer); timer = null; }
       if (err && (err.name === "AbortError" || err.code === 20)) {
-        var timeoutError = new Error("请求超时（" + Math.round(timeout / 1000) + " 秒）：" + method + " " + path);
+        var timeoutError = new Error(t("请求超时（") + Math.round(timeout / 1000) + t(" 秒）：") + method + " " + path);
         timeoutError.status = 0;
         timeoutError.timeout = true;
         throw timeoutError;
@@ -478,7 +521,7 @@
       // 不再需要先选中再点按钮（两步变一步）。
       var item = document.createElement("button");
       item.type = "button";
-      item.textContent = vendor.name;
+      item.textContent = providerName(vendor.name);
       item.addEventListener("click", function () {
         closeVendorMenu();
         startVendorAdd(vendor);
@@ -518,7 +561,7 @@
     var menu = document.getElementById("addVendorMenu");
     if (!menu) return;
     if (menu.hidden && !menu.childElementCount) {
-      banner("warn", "没有可用的供应商，请检查插件配置的 enabled_realms。");
+      banner("warn", t("没有可用的供应商，请检查插件配置的 enabled_realms。"));
       return;
     }
     menu.hidden = !menu.hidden;
@@ -526,8 +569,14 @@
   }
 
   // vendorLabel 返回供应商展示名；未知 id 时退回 id 本身。
+  function providerName(name) {
+    if (language !== "en") return name;
+    if (name === "小浣熊") return "Raccoon";
+    return name.replace("国内版", "China").replace("国际版", "Global");
+  }
+
   function vendorLabel(vendorID, realm) {
-    if (vendorID && vendorsById[vendorID]) return vendorsById[vendorID].name;
+    if (vendorID && vendorsById[vendorID]) return providerName(vendorsById[vendorID].name);
     if (vendorID) return vendorID;
     // 旧数据可能只有 realm：拼一个可读的回退名。
     return realm === "global" ? "global" : "cn";

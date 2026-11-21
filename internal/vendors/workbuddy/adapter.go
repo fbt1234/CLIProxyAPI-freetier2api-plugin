@@ -9,6 +9,7 @@ package workbuddy
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -208,6 +209,7 @@ func (v *adapter) Execute(ctx context.Context, cred *core.Credential, req *core.
 		Meta:       ChatMetaFromBody(req.Payload),
 	})
 	if errChat != nil {
+		v.noteModelBlocked(native, req.Model, errChat)
 		return nil, errChat
 	}
 	return &pluginapi.ExecutorResponse{
@@ -231,6 +233,7 @@ func (v *adapter) ExecuteStream(ctx context.Context, cred *core.Credential, req 
 		Meta:       ChatMetaFromBody(req.Payload),
 	})
 	if errStream != nil {
+		v.noteModelBlocked(native, req.Model, errStream)
 		return errStream
 	}
 	defer func() { _ = reader.Close() }()
@@ -242,6 +245,25 @@ func (v *adapter) ExecuteStream(ctx context.Context, cred *core.Credential, req 
 		return errForward
 	}
 	return nil
+}
+
+// noteModelBlocked 把「上游说没有这个模型」记进运行时隔离表。
+//
+// 只处理 11102（FailureKindModelBlocked）：这类错误是全局事实，重试无意义，
+// 从清单里摘掉比让客户端反复撞 400 更友好。其它错误（限流、余额、内容）
+// 与模型是否存在无关，不能拿来避让模型。
+func (v *adapter) noteModelBlocked(cred *Credential, model string, err error) {
+	var failure *core.Failure
+	if !errors.As(err, &failure) || failure.Kind != core.FailureKindModelBlocked {
+		return
+	}
+	region := RegionGlobal
+	if cred != nil {
+		region = cred.Realm()
+	}
+	v.rt.markModelBlocked(region, model)
+	logger.Info("上游报告模型不可用（11102），%s 清单内隔离 %s，%s 后自动回归",
+		region, model, blockedModelTTL)
 }
 
 // ---- 额度与签到 ----
@@ -633,6 +655,9 @@ type runtime struct {
 
 	modelMu    sync.Mutex
 	modelCache map[Region]modelCacheEntry
+	// blockedModels 记录上游明确说「该后端无此模型」（11102）的模型，
+	// 键是 realm|model，值是观察到不可用的时刻；过期后自动放行。
+	blockedModels map[string]time.Time
 }
 
 func newRuntime(env core.Env) *runtime {

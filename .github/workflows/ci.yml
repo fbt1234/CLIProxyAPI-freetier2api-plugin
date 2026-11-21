@@ -26,7 +26,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.26'
           # 本项目没有第三方依赖（无 go.sum），关掉模块缓存以免 setup-go 报警告。
           cache: false
 
@@ -78,7 +78,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.26'
           cache: false
 
       - name: 安装交叉编译器（linux/arm64）
@@ -182,7 +182,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.26'
           cache: false
 
       - name: 生成插件商店校验和（checksums.txt）

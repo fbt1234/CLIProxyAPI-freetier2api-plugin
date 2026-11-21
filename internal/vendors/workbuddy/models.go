@@ -192,11 +192,21 @@ func nonChatModel(entry dynModelEntry) bool {
 			return true
 		}
 	}
+	// 视频/音频生成模型：上游目录把它们当普通模型下发，但没有对话后端，
+	// 调用必报 400 "Backend [maas] is not supported"（实测 kling-video-v3、
+	// seedance-2.5）。按家族名过滤，避免客户端选到必失败的模型。
+	for _, family := range []string{"kling", "seedance", "sora", "veo-", "veo2", "veo3", "hailuo", "jimeng", "vidu", "pixverse", "runway", "luma", "cogvideo", "wan2", "hunyuanvideo", "minimax-video"} {
+		if strings.Contains(id, family) {
+			return true
+		}
+	}
 	if entry.MaxOutputTokens > 0 && entry.MaxOutputTokens <= 256 {
 		return true
 	}
 	for _, tag := range entry.Tags {
-		if strings.EqualFold(strings.TrimSpace(tag), "text-to-image") {
+		switch strings.ToLower(strings.TrimSpace(tag)) {
+		case "text-to-image", "text-to-video", "image-to-video", "video-generation",
+			"text-to-speech", "audio-generation":
 			return true
 		}
 	}
@@ -215,11 +225,11 @@ func (c *Client) FetchModels(region Region) ([]ModelInfo, error) {
 
 	if hasCache && len(entry.models) > 0 {
 		if time.Since(entry.fetchedAt) < modelCacheTTL {
-			return entry.models, nil
+			return rt.filterBlockedModels(region, entry.models), nil
 		}
 		// 失败冷却期内不重复打上游。
 		if time.Since(entry.lastFail) < modelCacheFailWindow {
-			return entry.models, nil
+			return rt.filterBlockedModels(region, entry.models), nil
 		}
 	}
 
@@ -234,7 +244,7 @@ func (c *Client) FetchModels(region Region) ([]ModelInfo, error) {
 		rt.modelCache[region] = cached
 		rt.modelMu.Unlock()
 		if len(cached.models) > 0 {
-			return cached.models, nil
+			return rt.filterBlockedModels(region, cached.models), nil
 		}
 		return nil, errFetch
 	}
@@ -242,7 +252,70 @@ func (c *Client) FetchModels(region Region) ([]ModelInfo, error) {
 	rt.modelMu.Lock()
 	rt.modelCache[region] = modelCacheEntry{models: models, fetchedAt: time.Now()}
 	rt.modelMu.Unlock()
-	return models, nil
+	return rt.filterBlockedModels(region, models), nil
+}
+
+// blockedModelTTL 是「上游明确说没有这个模型」的隔离时长。
+//
+// 11102（service info not found）是上游路由表缺条目，属于全局事实而不是账号
+// 问题；但上游补回来后我们无从得知，所以隔离而非永久删除。
+const blockedModelTTL = 24 * time.Hour
+
+// blockedKey 生成隔离表的键：同一模型在两个域是两条独立条目。
+func blockedKey(region Region, model string) string {
+	return string(region) + "|" + strings.TrimSpace(model)
+}
+
+// markModelBlocked 记录一次模型级避让（上游 11102）。
+//
+// 目的：上游目录会残留已下线的模型（实测 workbuddyglobal 的 o4-mini 调用必报
+// 400 "model [o4-mini] service info not found"），列表里留着它只会让客户端
+// 选到必失败的模型。观察到一次不可用后从清单里摘掉，TTL 到期自动回归。
+func (r *runtime) markModelBlocked(region Region, model string) {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return
+	}
+	r.modelMu.Lock()
+	defer r.modelMu.Unlock()
+	if r.blockedModels == nil {
+		r.blockedModels = map[string]time.Time{}
+	}
+	r.blockedModels[blockedKey(region, model)] = time.Now()
+}
+
+// filterBlockedModels 摘掉隔离期内的模型；顺带清理过期条目。
+//
+// 全被隔离时原样返回：宁可在列表里留一个坏模型，也不能让整个清单变空。
+func (r *runtime) filterBlockedModels(region Region, models []ModelInfo) []ModelInfo {
+	r.modelMu.Lock()
+	defer r.modelMu.Unlock()
+	if len(r.blockedModels) == 0 {
+		return models
+	}
+	now := time.Now()
+	blocked := make(map[string]struct{}, len(r.blockedModels))
+	for key, at := range r.blockedModels {
+		if now.Sub(at) > blockedModelTTL {
+			delete(r.blockedModels, key)
+			continue
+		}
+		blocked[key] = struct{}{}
+	}
+	if len(blocked) == 0 {
+		return models
+	}
+	kept := make([]ModelInfo, 0, len(models))
+	for _, model := range models {
+		if _, bad := blocked[blockedKey(region, model.ID)]; bad {
+			continue
+		}
+		kept = append(kept, model)
+	}
+	if len(kept) == 0 {
+		return models
+	}
+	return kept
 }
 
 // 模型目录缓存挂在 adapter 的 runtime 上，按 App 实例隔离。
@@ -254,12 +327,17 @@ func (c *Client) FetchModels(region Region) ([]ModelInfo, error) {
 // cachedModels 只返回已缓存的清单，不触发上游请求（供管理页展示）。
 func (r *runtime) cachedModels() map[Region][]ModelInfo {
 	r.modelMu.Lock()
-	defer r.modelMu.Unlock()
-	out := make(map[Region][]ModelInfo, len(r.modelCache))
+	snapshot := make(map[Region][]ModelInfo, len(r.modelCache))
 	for region, entry := range r.modelCache {
 		if len(entry.models) > 0 {
-			out[region] = entry.models
+			snapshot[region] = entry.models
 		}
+	}
+	r.modelMu.Unlock()
+	// 过滤要在释放锁之后做：filterBlockedModels 自己会拿 modelMu。
+	out := make(map[Region][]ModelInfo, len(snapshot))
+	for region, models := range snapshot {
+		out[region] = r.filterBlockedModels(region, models)
 	}
 	return out
 }

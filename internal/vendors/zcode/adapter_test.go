@@ -146,3 +146,29 @@ func TestLegacyZCodeCredentialMigratesToGlobal(t *testing.T) {
 		t.Fatalf("native = %+v", native)
 	}
 }
+
+// TestModelCreditsReportSubscription 锁住「订阅」倍率：ZCode 是订阅制套餐，
+// 上游不给数值倍率，控制台不能永远显示「—」。
+func TestModelCreditsReportSubscription(t *testing.T) {
+	instance := newInstance(core.Env{}, VendorIDCN, VendorNameCN, RegionCN, ProviderBigmodel)
+	models := bundledModels()
+	instance.applyModelCredits(models)
+
+	credits := instance.ModelCredits()
+	if len(credits) != len(models) {
+		t.Fatalf("credits 条目 = %d, want %d", len(credits), len(models))
+	}
+	for _, model := range models {
+		if got := credits[model.ID]; got != creditSubscription {
+			t.Fatalf("credits[%s] = %q, want %q", model.ID, got, creditSubscription)
+		}
+	}
+}
+
+// TestModelCreditsEmptyBeforeProbe 未探测前应是「未知」（nil），不是空字符串。
+func TestModelCreditsEmptyBeforeProbe(t *testing.T) {
+	instance := newInstance(core.Env{}, VendorIDCN, VendorNameCN, RegionCN, ProviderBigmodel)
+	if credits := instance.ModelCredits(); credits != nil {
+		t.Fatalf("credits = %#v, want nil", credits)
+	}
+}

@@ -37,7 +37,7 @@
   // quiet 为 true 时不弹横幅——进入页面会自动跑一次，那时不需要打扰用户；
   // 手动点按钮时才给反馈。
   function loadQuotas(quiet, targets) {
-    if (!quiet) banner("ok", "正在查询账号额度…", 0);
+    if (!quiet) banner("ok", t("正在查询账号额度…"), 0);
     // 额度批量是慢接口：后端一轮最多三分钟，用普通档会把正常请求掐掉。
     return api("POST", "/quotas", { account_ids: targets || [] }, { timeout: API_SLOW_TIMEOUT_MS }).then(function (data) {
       if (!data) return;
@@ -45,20 +45,20 @@
       var failures = results.filter(function (r) { return !r.ok; });
       if (!quiet) {
         if (!failures.length) {
-          banner("ok", "额度查询完成：" + results.length + " 个账号", 5000);
+          banner("ok", t("额度查询完成：") + results.length + t(" 个账号"), 5000);
         } else {
           // 只给「N 个失败」时用户不知道是哪个账号、什么原因，只能逐个试；
           // 逐条列出前 5 个，其余折叠成计数，避免横幅无限长。
           var detail = failures.slice(0, 5).map(function (r) {
-            var who = r.label || r.name || r.auth_id || "未知账号";
-            var vendor = r.vendor_name || r.vendor_id || "未知供应商";
-            return vendor + " / " + who + "：" + (r.message || "未知错误");
+            var who = r.label || r.name || r.auth_id || t("未知账号");
+            var vendor = r.vendor_name || r.vendor_id || t("未知供应商");
+            return vendor + " / " + who + "：" + (r.message || t("未知错误"));
           });
           if (failures.length > detail.length) {
-            detail.push("…等 " + failures.length + " 个账号失败");
+            detail.push(t("…等 ") + failures.length + t(" 个账号失败"));
           }
-          banner("warn", "额度查询完成：" + results.length + " 个账号，" +
-            failures.length + " 个失败\n" + detail.join("\n"), 12000);
+          banner("warn", t("额度查询完成：") + results.length + t(" 个账号，") +
+            failures.length + t(" 个失败\n") + detail.join("\n"), 12000);
         }
       }
       return loadStatus(true);
@@ -86,15 +86,15 @@
     // error 只表示取数失败（上游挂了 / 鉴权失效 / 限流）：按钮保持可点作为
     // 重试入口，但文案必须明确是「查询失败」，不能假装「套餐领取」可领——
     // 那会让用户以为有套餐可领，点下去却是「上游限流」。
-    if (claim.error) return { text: "查询失败·重试", disabled: false, title: claim.error };
+    if (claim.error) return { text: t("查询失败·重试"), disabled: false, title: claim.error };
     // 未检测过（初次加载）或有待领套餐
     if (!claim.checked_at || claim.claimable > 0) {
       // 可领数量比说明更有用：说明只解释「为什么现在没有额度」，不该盖掉
       // 「有 N 个套餐可领」这个可操作信息。
-      return { text: "套餐领取", disabled: false, title: claim.claimable ? (claim.claimable + " 个套餐可领") : (claim.note || "点击查询可领套餐") };
+      return { text: t("套餐领取"), disabled: false, title: claim.claimable ? (claim.claimable + t(" 个套餐可领")) : (claim.note || t("点击查询可领套餐")) };
     }
     // 已全部领取
-    return { text: "已领取", disabled: true, title: claim.note || "已领取当前全部套餐" };
+    return { text: t("已领取"), disabled: true, title: claim.note || t("已领取当前全部套餐") };
   }
 
   // openClaimModal 打开领取弹窗并实时拉取可领套餐。
@@ -104,8 +104,8 @@
     var captchaBox = document.getElementById("claimCaptcha");
     var hint = document.getElementById("claimHint");
     var pasteBox = document.getElementById("claimPasteBox");
-    document.getElementById("claimTitle").textContent = "套餐领取 · " + accountDisplay(account);
-    plans.textContent = "正在查询可领套餐…";
+    document.getElementById("claimTitle").textContent = t("套餐领取 · ") + accountDisplay(account);
+    plans.textContent = t("正在查询可领套餐…");
     captchaBox.textContent = "";
     hint.textContent = "";
     pasteBox.hidden = true;
@@ -123,11 +123,11 @@
         if (!claimContext || claimContext.account !== account) return;
         if (!data) return;
         if (!data.ok) {
-          plans.textContent = data.message || "查询失败";
+          plans.textContent = data.message || t("查询失败");
           return;
         }
         if (!data.plans || !data.plans.length) {
-          plans.textContent = "已领取当前全部套餐，暂无新的可领活动。";
+          plans.textContent = t("已领取当前全部套餐，暂无新的可领活动。");
           return;
         }
         renderClaimPlans(data.plans);
@@ -139,7 +139,7 @@
       })
       .catch(function (err) {
         if (!claimContext || claimContext.account !== account) return;
-        plans.textContent = err.message || "查询套餐失败";
+        plans.textContent = err.message || t("查询套餐失败");
       });
   }
 
@@ -180,6 +180,7 @@
   // formatGrantUnits 把 token 额度写成可读形式（12.5万 tokens / 1.2亿 tokens）。
   function formatGrantUnits(units) {
     if (!units || units <= 0) return "0";
+    if (language === "en") return Math.round(units).toLocaleString("en-US") + " tokens";
     if (units >= 1e8) return trimZero((units / 1e8).toFixed(2)) + "亿 tokens";
     if (units >= 1e4) return trimZero((units / 1e4).toFixed(1)) + "万 tokens";
     return Math.round(units) + " tokens";
@@ -197,7 +198,7 @@
   function setupClaimCaptcha(config) {
     var hint = document.getElementById("claimHint");
     if (!config.scene_id) {
-      hint.textContent = "上游未下发人机验证参数，无法在页面内完成领取";
+      hint.textContent = t("上游未下发人机验证参数，无法在页面内完成领取");
       return;
     }
     loadAliyunSdk().then(function () {
@@ -218,20 +219,20 @@
           if (!claimContext) return;
           claimContext.verifyParam = (typeof param === "string" ? param : (param && param.captchaVerifyParam) || "");
           claimContext.captcha = config;
-          hint.textContent = "✓ 人机验证已通过，请点击确认领取。";
+          hint.textContent = t("✓ 人机验证已通过，请点击确认领取。");
           document.getElementById("btnClaimConfirm").disabled = false;
         },
         fail: function () {
-          hint.textContent = "未通过无感验证，请按提示完成滑块。";
+          hint.textContent = t("未通过无感验证，请按提示完成滑块。");
         },
         onError: function () {
-          hint.textContent = "人机验证出错，请重试。";
+          hint.textContent = t("人机验证出错，请重试。");
         }
       });
-      hint.textContent = "请完成人机验证（多数情况下无感通过）。";
+      hint.textContent = t("请完成人机验证（多数情况下无感通过）。");
     }).catch(function (err) {
       // CDN 不可达时降级成粘贴：总比让用户无路可走好。
-      hint.textContent = err.message + "，可展开下方粘贴验证码参数。";
+      hint.textContent = err.message + t("，可展开下方粘贴验证码参数。");
       document.getElementById("claimPasteBox").hidden = false;
     });
   }
@@ -247,11 +248,11 @@
       s.onload = function () {
         if (typeof window.initAliyunCaptcha === "function") { resolve(); return; }
         aliyunSdkPromise = null;
-        reject(new Error("验证码组件加载异常，请重试"));
+        reject(new Error(t("验证码组件加载异常，请重试")));
       };
       s.onerror = function () {
         aliyunSdkPromise = null;
-        reject(new Error("验证码脚本加载失败"));
+        reject(new Error(t("验证码脚本加载失败")));
       };
       document.head.appendChild(s);
     });
@@ -264,28 +265,28 @@
     var pasted = (document.getElementById("claimVerifyParam").value || "").trim();
     var param = claimContext.verifyParam || pasted;
     if (!param) {
-      banner("warn", "请先完成人机验证");
+      banner("warn", t("请先完成人机验证"));
       return;
     }
     var btn = document.getElementById("btnClaimConfirm");
     btn.disabled = true;
-    btn.textContent = "领取中…";
+    btn.textContent = t("领取中…");
     api("POST", "/plans/claim", {
       account_id: claimContext.account.auth_id || claimContext.account.auth_index,
       plan_id: claimContext.planId,
       verify_param: param,
       verify_region: (claimContext.captcha && claimContext.captcha.region) || ""
     }).then(function (data) {
-      btn.textContent = "确认领取";
+      btn.textContent = t("确认领取");
       btn.disabled = false;
       if (!data) return;
-      banner(data.ok ? "ok" : "err", data.message || (data.ok ? "领取成功" : "领取失败"));
+      banner(data.ok ? "ok" : "err", data.message || (data.ok ? t("领取成功") : t("领取失败")));
       if (!data.ok) return;
       closeClaimModal();
       // 领取后的额度与「已领取」状态由插件在同一次刷新里写好，重拉一次即可置灰。
       loadStatus(true).catch(function () { });
     }).catch(function (err) {
-      btn.textContent = "确认领取";
+      btn.textContent = t("确认领取");
       btn.disabled = false;
       banner("err", err.message);
     });
